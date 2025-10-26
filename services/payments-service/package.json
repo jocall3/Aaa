@@ -22,7 +22,7 @@
     "generate:api": "echo 'Code generation from OpenAPI specs would run here'"
   },
   "dependencies": {
-    "@nestjs/common": "^9.0.0",
+    "@nestjs/common": "^11.1.7",
     "@nestjs/config": "^2.3.1",
     "@nestjs/core": "^9.0.0",
     "@nestjs/elasticsearch": "^9.0.0",
