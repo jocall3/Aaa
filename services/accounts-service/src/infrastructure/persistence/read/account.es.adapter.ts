@@ -1,112 +1,162 @@
+/**
+ * @file account.es.adapter.ts
+ * @description This file contains the Elasticsearch adapter for the Account read repository.
+ * It implements the IAccountReadRepository port and provides the persistence logic
+ * for the denormalized AccountReadModel, used on the query side of the CQRS pattern.
+ * This implementation adheres to the new Generic Repository and Data Mapper patterns.
+ *
+ * @see /docs/adr/ADR-005-generic-repository-and-error-handling.md
+ * @author Elite AI Implementation Team
+ * @version 2.0.0
+ */
+
 import { Client, estypes } from '@elastic/elasticsearch';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+
+// Fictional imports for new architectural patterns. In a real scenario, these would come from shared libraries.
+import { GenericDataMapper } from '../../../../../../libs/persistence/generic.data-mapper'; // Fictional path
+import { InfrastructureError } from '../../../../../../libs/error-framework/infrastructure.error'; // Fictional path
+
+import { IAccountReadRepository } from '../../../application/ports/account-read.repository';
 import { AccountReadModel } from '../../../domain/read-models/account.read-model';
-import { AccountReadRepository } from '../../../application/ports/out/account.read.repository';
-import { ELASTICSEARCH_CLIENT } from '../../elasticsearch/elasticsearch.constants';
+import { ELASTICSEARCH_CLIENT } from '../../common/elasticsearch.constants';
+
+// --- Persistence & Mapping Layer ---
+// NOTE: For clarity, these are included here. In a complete implementation,
+// they would reside in separate files (e.g., account.es.persistence.ts, account.es.mapper.ts).
+
+/**
+ * @interface AccountEsPersistence
+ * @description Represents the data structure of an account document as stored in Elasticsearch.
+ * This is the "Persistence" model in the GenericDataMapper pattern.
+ * @internal
+ */
+interface AccountEsPersistence {
+  accountId: string;
+  customerId: string;
+  userIds: string[];
+  accountStatus: string;
+  currentBalance: number;
+  currencyCode: string;
+  createdAt: string; // ISO8601 string
+  updatedAt: string; // ISO8601 string
+  // Other fields from the mapping would be included here.
+}
+
+/**
+ * @class AccountEsMapper
+ * @implements GenericDataMapper<AccountReadModel, AccountEsPersistence>
+ * @description A stateless utility class for mapping between the domain's AccountReadModel
+ * and the persistence layer's AccountEsPersistence document. This follows the Data Mapper pattern.
+ */
+class AccountEsMapper implements GenericDataMapper<AccountReadModel, AccountEsPersistence> {
+  /**
+   * @public
+   * @method toDomain
+   * @description Maps from the persistence model (Elasticsearch document) to the domain read model.
+   * @param {AccountEsPersistence} persistence The raw document from Elasticsearch.
+   * @returns {AccountReadModel} The domain-layer read model.
+   */
+  public toDomain(persistence: AccountEsPersistence): AccountReadModel {
+    return {
+      id: persistence.accountId,
+      userId: persistence.customerId,
+      balance: persistence.currentBalance,
+      currency: persistence.currencyCode,
+      status: persistence.accountStatus,
+      createdAt: new Date(persistence.createdAt),
+      updatedAt: new Date(persistence.updatedAt),
+    };
+  }
+
+  /**
+   * @public
+   * @method toPersistence
+   * @description Maps from the domain read model to the persistence model (Elasticsearch document).
+   * @param {AccountReadModel} domain The domain-layer read model.
+   * @returns {AccountEsPersistence} The document to be stored in Elasticsearch.
+   */
+  public toPersistence(domain: AccountReadModel): AccountEsPersistence {
+    return {
+      accountId: domain.id,
+      customerId: domain.userId,
+      userIds: [domain.userId], // Example transformation
+      currentBalance: domain.balance,
+      currencyCode: domain.currency,
+      accountStatus: domain.status,
+      createdAt: domain.createdAt.toISOString(),
+      updatedAt: domain.updatedAt.toISOString(),
+    };
+  }
+}
 
 /**
  * @class AccountElasticsearchAdapter
- * @implements {AccountReadRepository}
+ * @implements {IAccountReadRepository}
  * @description
- * This class is an adapter for the AccountReadRepository port. It provides the concrete
- * implementation for querying and persisting denormalized account read models using Elasticsearch.
- * As part of the infrastructure layer in a Hexagonal Architecture, it translates application
- * requests into Elasticsearch-specific operations.
- * This adapter is crucial for the Query side of the CQRS pattern, offering fast,
- * flexible querying capabilities for account data.
+ * This class is the concrete implementation of the IAccountReadRepository port for Elasticsearch.
+ * It acts as a persistence adapter in the infrastructure layer, abstracting all Elasticsearch-specific
+ * logic from the application's core. It uses a Data Mapper to translate between domain and
+ * persistence models, fulfilling the Generic Repository and Data Mapper architectural directives.
  */
 @Injectable()
-export class AccountElasticsearchAdapter implements AccountReadRepository {
+export class AccountElasticsearchAdapter implements IAccountReadRepository {
   private readonly logger = new Logger(AccountElasticsearchAdapter.name);
   private readonly indexName = 'accounts_read_model';
+  private readonly mapper: AccountEsMapper = new AccountEsMapper();
 
   /**
    * @constructor
-   * @param {Client} esClient - The injected Elasticsearch client instance.
+   * @param {Client} esClient The injected Elasticsearch client instance.
    */
   constructor(
     @Inject(ELASTICSEARCH_CLIENT) private readonly esClient: Client,
   ) {
-    this.ensureIndexExists();
+    this.ensureIndexExists().catch(error => {
+      this.logger.error(`Fatal error ensuring index '${this.indexName}' exists. The service may not function correctly.`, error);
+      // In a production app, this might trigger a process exit or health check failure.
+    });
   }
 
   /**
-   * @private
-   * @async
-   * @method ensureIndexExists
-   * @description Checks if the Elasticsearch index exists and creates it if it doesn't.
-   * This is a basic setup and might be handled by a more robust migration/setup script in production.
-   * Defines the mapping for the AccountReadModel.
-   * @returns {Promise<void>}
-   */
-  private async ensureIndexExists(): Promise<void> {
-    try {
-      const { body: exists } = await this.esClient.indices.exists({ index: this.indexName });
-      if (!exists) {
-        this.logger.log(`Index '${this.indexName}' not found. Creating index...`);
-        await this.esClient.indices.create({
-          index: this.indexName,
-          body: {
-            mappings: {
-              properties: {
-                id: { type: 'keyword' },
-                userId: { type: 'keyword' },
-                balance: { type: 'double' },
-                currency: { type: 'keyword' },
-                accountType: { type: 'keyword' },
-                status: { type: 'keyword' },
-                createdAt: { type: 'date' },
-                updatedAt: { type: 'date' },
-                overdraftLimit: { type: 'double' },
-                nickname: { type: 'text' },
-              },
-            },
-          },
-        });
-        this.logger.log(`Index '${this.indexName}' created successfully.`);
-      }
-    } catch (error) {
-      this.logger.error(`Error ensuring index '${this.indexName}' exists:`, error);
-      // In a real application, this might be a fatal error that prevents startup.
-      throw error;
-    }
-  }
-
-  /**
+   * @public
    * @async
    * @method save
-   * @description Saves or updates an account read model document in Elasticsearch.
-   * It uses the account's ID as the document ID for idempotency.
-   * This is typically called by an event handler projecting changes to the read model.
-   * @param {AccountReadModel} account - The denormalized account data to persist.
+   * @description Saves (indexes or updates) a denormalized account read model in Elasticsearch.
+   * This is typically called by a projection handler reacting to domain events.
+   * @param {AccountReadModel} account The domain read model to save.
    * @returns {Promise<void>}
+   * @throws {InfrastructureError} If the Elasticsearch operation fails.
    */
-  async save(account: AccountReadModel): Promise<void> {
+  public async save(account: AccountReadModel): Promise<void> {
     this.logger.log(`Indexing account read model with ID: ${account.id}`);
     try {
+      const document = this.mapper.toPersistence(account);
       await this.esClient.index({
         index: this.indexName,
         id: account.id,
-        body: account,
-        refresh: 'wait_for', // Ensures the document is searchable immediately after indexing
+        body: document,
+        refresh: process.env.NODE_ENV === 'test' ? 'wait_for' : false,
       });
     } catch (error) {
-      this.logger.error(`Failed to save account read model for ID ${account.id}:`, error);
-      throw error;
+      this.logger.error(`Failed to save account read model for ID ${account.id}.`, error.stack);
+      throw new InfrastructureError(`Failed to save account read model for ID ${account.id}.`, { cause: error });
     }
   }
 
   /**
+   * @public
    * @async
    * @method findById
    * @description Retrieves a single account read model by its unique ID from Elasticsearch.
-   * @param {string} id - The unique identifier of the account.
+   * @param {string} id The unique identifier of the account.
    * @returns {Promise<AccountReadModel | null>} The account read model if found, otherwise null.
+   * @throws {InfrastructureError} If the Elasticsearch operation fails for reasons other than not found.
    */
-  async findById(id: string): Promise<AccountReadModel | null> {
+  public async findById(id: string): Promise<AccountReadModel | null> {
     this.logger.log(`Finding account read model by ID: ${id}`);
     try {
-      const response: estypes.GetResponse<AccountReadModel> = await this.esClient.get({
+      const response: estypes.GetResponse<AccountEsPersistence> = await this.esClient.get({
         index: this.indexName,
         id: id,
       });
@@ -114,43 +164,93 @@ export class AccountElasticsearchAdapter implements AccountReadRepository {
       if (!response.found || !response._source) {
         return null;
       }
-      return response._source;
+      return this.mapper.toDomain(response._source);
     } catch (error: any) {
-      if (error.statusCode === 404) {
+      if (error.meta?.statusCode === 404) {
         this.logger.warn(`Account read model with ID ${id} not found.`);
         return null;
       }
-      this.logger.error(`Error finding account read model by ID ${id}:`, error);
-      throw error;
+      this.logger.error(`Error finding account read model by ID ${id}.`, error.stack);
+      throw new InfrastructureError(`Error finding account read model by ID ${id}.`, { cause: error });
     }
   }
 
   /**
+   * @public
    * @async
    * @method findByUserId
    * @description Finds all account read models associated with a given user ID.
-   * @param {string} userId - The identifier of the user.
-   * @returns {Promise<AccountReadModel[]>} An array of account read models.
+   * @param {string} userId The identifier of the user.
+   * @returns {Promise<AccountReadModel[]>} An array of account read models, which may be empty.
+   * @throws {InfrastructureError} If the Elasticsearch operation fails.
    */
-  async findByUserId(userId: string): Promise<AccountReadModel[]> {
+  public async findByUserId(userId: string): Promise<AccountReadModel[]> {
     this.logger.log(`Finding account read models for user ID: ${userId}`);
     try {
-      const response: estypes.SearchResponse<AccountReadModel> = await this.esClient.search({
+      const response: estypes.SearchResponse<AccountEsPersistence> = await this.esClient.search({
         index: this.indexName,
         body: {
           query: {
             term: {
-              'userId.keyword': userId, // Use .keyword for exact match on keyword fields
+              customerId: userId, // Corresponds to the 'keyword' field in the mapping.
             },
           },
-          size: 100, // Apply a reasonable default limit to prevent excessive data retrieval
+          size: 100, // A sensible default limit
         },
       });
 
-      return response.hits.hits.map(hit => hit._source as AccountReadModel);
+      if (!response.hits.hits || response.hits.hits.length === 0) {
+        return [];
+      }
+      return response.hits.hits.map(hit => this.mapper.toDomain(hit._source as AccountEsPersistence));
     } catch (error) {
-      this.logger.error(`Error finding account read models by user ID ${userId}:`, error);
-      throw error;
+      this.logger.error(`Error finding account read models by user ID ${userId}.`, error.stack);
+      throw new InfrastructureError(`Error finding account read models by user ID ${userId}.`, { cause: error });
+    }
+  }
+
+  /**
+   * @private
+   * @async
+   * @method ensureIndexExists
+   * @description Checks if the target Elasticsearch index exists on startup, and creates it if not.
+   * The mapping is derived from the centralized 'account-read-model.mapping.json' file.
+   * In production, a more robust index lifecycle management tool would be used.
+   * @returns {Promise<void>}
+   */
+  private async ensureIndexExists(): Promise<void> {
+    const { body: exists } = await this.esClient.indices.exists({ index: this.indexName });
+    if (exists) {
+      this.logger.log(`Index '${this.indexName}' already exists.`);
+      return;
+    }
+
+    this.logger.log(`Index '${this.indexName}' not found. Creating index...`);
+    try {
+      await this.esClient.indices.create({
+        index: this.indexName,
+        body: {
+          mappings: {
+            // This is a subset of the mapping from account-read-model.mapping.json
+            // for illustrative purposes. A real implementation might load the JSON file.
+            dynamic: 'strict',
+            properties: {
+              accountId: { type: 'keyword' },
+              customerId: { type: 'keyword' },
+              userIds: { type: 'keyword' },
+              accountStatus: { type: 'keyword' },
+              currencyCode: { type: 'keyword' },
+              currentBalance: { type: 'scaled_float', scaling_factor: 100 },
+              createdAt: { type: 'date' },
+              updatedAt: { type: 'date' },
+            },
+          },
+        },
+      });
+      this.logger.log(`Index '${this.indexName}' created successfully.`);
+    } catch (error) {
+      this.logger.error(`Error creating index '${this.indexName}'.`, error);
+      throw error; // Propagate error on startup
     }
   }
 }
