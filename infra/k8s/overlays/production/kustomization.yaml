@@ -1,0 +1,97 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All resources will be deployed to the 'production' namespace.
+namespace: production
+
+# Inherit and build upon the common base configurations.
+bases:
+  - ../../base
+
+# Add resources that are exclusive to the production environment.
+resources:
+  # Resource definition for the 'production' namespace itself.
+  - namespace.yaml
+  # Production-specific Istio Gateway and VirtualServices for public ingress.
+  - istio-gateway-prod.yaml
+  # HorizontalPodAutoscaler definitions for all microservices.
+  - hpa-definitions.yaml
+
+# Override container images to use specific, approved production tags from
+# the secure production container registry. This prevents the use of 'latest'
+# or development tags in production.
+images:
+  # User Identity and Access Management (IAM) Service
+  - name: bank-of-anthos/iam-service
+    newName: registry.prod.corp/bank-of-anthos/iam-service
+    newTag: "1.5.2-a4b1c8f"
+
+  # Accounts Service
+  - name: bank-of-anthos/accounts-service
+    newName: registry.prod.corp/bank-of-anthos/accounts-service
+    newTag: "1.5.2-a4b1c8f"
+
+  # Payments Service
+  - name: bank-of-anthos/payments-service
+    newName: registry.prod.corp/bank-of-anthos/payments-service
+    newTag: "1.5.2-a4b1c8f"
+
+  # Rewards Service
+  - name: bank-of-anthos/rewards-service
+    newName: registry.prod.corp/bank-of-anthos/rewards-service
+    newTag: "1.5.2-a4b1c8f"
+
+  # Frontend Shell Application (Micro-Frontends Host)
+  - name: bank-of-anthos/frontend-shell
+    newName: registry.prod.corp/bank-of-anthos/frontend-shell
+    newTag: "2.3.1-d9e0f3a"
+
+# Apply targeted patches to modify base resources for production requirements.
+patches:
+  # Increase replica counts for high availability. Base replicas are likely 1.
+  - path: patches/replicas.yaml
+    target:
+      kind: Deployment
+      labelSelector: "tier=backend"
+
+  # Set production-grade CPU and Memory resource requests and limits.
+  - path: patches/resources.yaml
+    target:
+      kind: Deployment
+      labelSelector: "tier=backend"
+
+  # Add Vault agent injector annotations to all backend Deployments to enable
+  # dynamic secret injection at runtime, adhering to Zero Trust principles.
+  - path: patches/vault-annotations.yaml
+    target:
+      kind: Deployment
+      labelSelector: "tier=backend"
+
+  # Enforce scheduling constraints: use production-grade nodes and spread pods across failure domains.
+  - path: patches/scheduling.yaml
+    target:
+      kind: Deployment
+      labelSelector: "tier=backend"
+
+  # Override configuration for the Ingress Gateway to enable mTLS and production domains.
+  - path: patches/ingress-gateway.yaml
+    target:
+      kind: Gateway
+      name: main-gateway
+      namespace: istio-system
+
+# Generate a shared ConfigMap containing URLs and settings for production services.
+# This will be mounted into all service pods.
+configMapGenerator:
+  - name: platform-config-production
+    behavior: merge
+    literals:
+      - ENV_NAME="production"
+      - LOG_LEVEL="info"
+      - TRACING_ENABLED="true"
+      - KAFKA_BROKERS="kafka-prod-headless.kafka.svc.cluster.local:9092"
+      - VAULT_ADDR="https://vault.vault.svc.cluster.local:8200"
+      - IAM_SERVICE_URL="http://iam-service.production.svc.cluster.local"
+      - REDIS_URL="redis://redis-master.production.svc.cluster.local:6379"
+      - ELASTICSEARCH_URL="http://elasticsearch-master.logging.svc.cluster.local:9200"
+      - OTEL_COLLECTOR_ENDPOINT="http://opentelemetry-collector.observability.svc.cluster.local:4317"

@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# This Kustomize base defines the common foundation for the microservices platform.
+# It includes all service definitions and shared infrastructure components.
+# Environment-specific configurations (e.g., development, staging, production)
+# are applied as overlays on top of this base.
+
+namespace: microservices-platform
+
+resources:
+  # 1. Platform-wide resources
+  - namespace.yaml
+  - network-policies.yaml
+  - rbac.yaml
+
+  # 2. Service Mesh Configuration
+  - istio-gateway.yaml
+
+  # 3. Backing Services (Data, Cache, Messaging)
+  - backing-services/kafka.yaml
+  - backing-services/postgres-primary.yaml
+  - backing-services/elasticsearch.yaml
+  - backing-services/redis.yaml
+
+  # 4. Security Services
+  - security/vault-config.yaml
+
+  # 5. Core Business Microservices
+  - services/iam-service.yaml
+  - services/accounts-service.yaml
+  - services/payments-service.yaml
+  - services/rewards-service.yaml
+  - services/user-identity-service.yaml
+
+  # 6. Micro-Frontend Shell Application
+  - frontends/shell-app.yaml
+
+# Common labels to apply to every resource deployed from this base.
+commonLabels:
+  app.kubernetes.io/part-of: microservices-platform
+  architecture: ddd-es-cqrs-hexagonal
+
+# Common annotations for tracking and management.
+commonAnnotations:
+  managed-by: "kustomize"
+  owner: "Elite-AI-Implementation-Team"
+  docs: "https://internal-wiki/adr/microservices-platform"
