@@ -1,0 +1,472 @@
+openapi: 3.0.3
+info:
+  title: Accounts Service
+  description: >-
+    Manages the lifecycle and state of user bank accounts within a Domain-Driven, Event-Sourced, and CQRS-based architecture. 
+    
+    This API is divided into two main responsibilities:
+    1.  **Commands**: Operations that intend to change the state of an account (e.g., creating an account, depositing funds). These are processed asynchronously. A successful request (HTTP 202 Accepted) indicates that the command has been validated and accepted for processing, not that the action has been completed.
+    2.  **Queries**: Operations that read the current state of accounts and transactions. These endpoints retrieve data from optimized, denormalized read models for high performance and availability.
+    
+    All interactions are secured via JWTs issued by the central Identity and Access Management (IAM) service.
+  version: 1.0.0
+  contact:
+    name: Elite AI Implementation Team - Accounts Domain
+    email: accounts-dev@example.com
+servers:
+  - url: /api/accounts
+    description: API Gateway route for the Accounts Service
+tags:
+  - name: Account Commands
+    description: >-
+      Write operations to change the state of accounts. These endpoints accept commands, validate them, and if valid, persist an event to the event store. Processing is asynchronous.
+  - name: Account Queries
+    description: >-
+      Read operations to retrieve account information from optimized, denormalized read models.
+  - name: Transaction Queries
+    description: >-
+      Read operations to retrieve transaction history for accounts.
+paths:
+  /v1/accounts:
+    post:
+      tags:
+        - Account Commands
+      summary: Create a New Account
+      description: >-
+        Submits a command to create a new bank account for a user. Upon successful validation, the command is accepted for processing, and an `AccountCreated` event is persisted to the event store. The response indicates acceptance, not completion.
+      operationId: createAccount
+      requestBody:
+        description: Details for the new account to be created.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '202':
+          description: >-
+            Command accepted. The request was successfully validated and queued for processing. The response body contains the unique identifier for the newly created account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountId:
+                    type: string
+                    format: uuid
+                    description: The unique identifier assigned to the new account.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: >-
+            Conflict. An account with the specified characteristics (e.g., same type for the same user) already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+        - Account Queries
+      summary: List User Accounts
+      description: >-
+        Retrieves a list of all accounts associated with the authenticated user from a denormalized read model. Supports pagination.
+      operationId: listAccounts
+      parameters:
+        - name: limit
+          in: query
+          description: The maximum number of accounts to return in a single page.
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          description: The number of accounts to skip before starting to collect the result set.
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: A list of the user's accounts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/accounts/{accountId}:
+    get:
+      tags:
+        - Account Queries
+      summary: Get Account Details
+      description: Retrieves the complete, current state of a specific account from a denormalized read model.
+      operationId: getAccountById
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Successfully retrieved account details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Account Commands
+      summary: Update Account Details
+      description: >-
+        Submits a command to update mutable account details, such as its nickname. Persists an `AccountDetailsUpdated` event on success.
+      operationId: updateAccountDetails
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        description: The account details to update.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountDetailsRequest'
+      responses:
+        '202':
+          description: Command accepted for processing.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Account Commands
+      summary: Close an Account
+      description: >-
+        Submits a command to close an account. This is a logical deletion that persists an `AccountClosed` event. The account's status will be updated to 'CLOSED', but the record is retained for auditing and historical purposes.
+      operationId: closeAccount
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '202':
+          description: Command accepted for processing.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/accounts/{accountId}/deposits:
+    post:
+      tags:
+        - Account Commands
+      summary: Deposit Funds
+      description: Submits a command to deposit funds into a specific account. Persists a `FundsDeposited` event on success.
+      operationId: depositFunds
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        description: The details of the deposit.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequest'
+      responses:
+        '202':
+          description: Command accepted for processing.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/accounts/{accountId}/withdrawals:
+    post:
+      tags:
+        - Account Commands
+      summary: Withdraw Funds
+      description: Submits a command to withdraw funds from a specific account. Persists a `FundsWithdrawn` event on success.
+      operationId: withdrawFunds
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        description: The details of the withdrawal.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequest'
+      responses:
+        '202':
+          description: Command accepted for processing.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict. Insufficient funds for the withdrawal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/accounts/{accountId}/transactions:
+    get:
+      tags:
+        - Transaction Queries
+      summary: Get Account Transaction History
+      description: >-
+        Retrieves a paginated list of transactions for a specific account from a denormalized read model. Transactions are returned in reverse chronological order.
+      operationId: getTransactionsByAccountId
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: fromDate
+          in: query
+          description: The start date for the transaction query range (ISO 8601 format).
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          description: The end date for the transaction query range (ISO 8601 format).
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: The maximum number of transactions to return.
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          description: The number of transactions to skip.
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: A list of transactions for the specified account.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  schemas:
+    Money:
+      type: object
+      description: Represents a monetary amount with its currency.
+      properties:
+        amount:
+          type: string
+          format: decimal
+          description: The monetary amount as a string to ensure precision.
+          example: "150.75"
+        currency:
+          type: string
+          description: The ISO 4217 currency code.
+          example: "USD"
+      required:
+        - amount
+        - currency
+    Account:
+      type: object
+      description: Represents the denormalized state of a user's bank account.
+      properties:
+        accountId:
+          type: string
+          format: uuid
+          description: The unique identifier for the account.
+          readOnly: true
+        userId:
+          type: string
+          format: uuid
+          description: The unique identifier for the user who owns the account.
+          readOnly: true
+        accountType:
+          type: string
+          enum: [CHECKING, SAVINGS]
+          description: The type of the bank account.
+        status:
+          type: string
+          enum: [OPEN, CLOSED, FROZEN]
+          description: The current status of the account.
+          readOnly: true
+        balance:
+          $ref: '#/components/schemas/Money'
+        nickname:
+          type: string
+          nullable: true
+          description: A user-defined nickname for the account.
+        createdAt:
+          type: string
+          format: date-time
+          description: The timestamp when the account was created.
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          description: The timestamp when the account was last updated.
+          readOnly: true
+    Transaction:
+      type: object
+      description: Represents a single financial transaction on an account.
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: The unique identifier for the transaction.
+          readOnly: true
+        accountId:
+          type: string
+          format: uuid
+          description: The identifier of the account to which this transaction belongs.
+          readOnly: true
+        type:
+          type: string
+          enum: [DEPOSIT, WITHDRAWAL, TRANSFER_IN, TRANSFER_OUT]
+          description: The type of transaction.
+          readOnly: true
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: A short description of the transaction.
+        timestamp:
+          type: string
+          format: date-time
+          description: The timestamp when the transaction occurred.
+          readOnly: true
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+          description: The current status of the transaction.
+          readOnly: true
+    CreateAccountRequest:
+      type: object
+      description: Schema for the 'Create Account' command.
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The ID of the user for whom the account is being created.
+        accountType:
+          type: string
+          enum: [CHECKING, SAVINGS]
+          description: The type of account to create.
+        nickname:
+          type: string
+          description: An optional nickname for the new account.
+        initialDeposit:
+          $ref: '#/components/schemas/Money'
+      required:
+        - userId
+        - accountType
+        - initialDeposit
+    UpdateAccountDetailsRequest:
+      type: object
+      description: Schema for the 'Update Account Details' command.
+      properties:
+        nickname:
+          type: string
+          description: The new nickname for the account.
+      required:
+        - nickname
+    DepositRequest:
+      type: object
+      description: Schema for the 'Deposit Funds' command.
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: A description for the deposit transaction.
+          example: "Paycheck"
+      required:
+        - amount
+    WithdrawRequest:
+      type: object
+      description: Schema for the 'Withdraw Funds' command.
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: A description for the withdrawal transaction.
+          example: "ATM Withdrawal"
+      required:
+        - amount
+    Error:
+      type: object
+      description: A standardized error response payload.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: The time the error occurred.
+        status:
+          type: integer
+          description: The HTTP status code.
+        error:
+          type: string
+          description: The HTTP status description.
+          example: "Bad Request"
+        message:
+          type: string
+          description: A human-readable description of the error.
+          example: "Validation failed for field 'accountType'"
+        path:
+          type: string
+          description: The path of the request that caused the error.
+          example: "/v1/accounts"
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      description: The unique identifier of the account.
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: >-
+        Authentication failed. The JWT is missing, invalid, expired, or does not have the required permissions.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: >-
+        The request is malformed. This could be due to missing required fields, invalid data formats, or other validation errors.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested resource (e.g., an Account) could not be found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        JWT authentication token issued by the central IAM service. The token should be included in the 'Authorization' header as 'Bearer {token}'.
+security:
+  - BearerAuth: []
