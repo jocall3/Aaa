@@ -1,0 +1,1853 @@
+---
+swagger: "2.0"
+info:
+  version: 2.0.0
+  title: Accounts
+  description: |-
+    The Accounts API lets you retrieve account and transaction data for Citi Customers who have authorized your app. In most cases, you&#039;ll want to request a summary of all accounts first, which will return basic account information and account IDs. Once you have this information, you can request additional account details and/or transactions.
+
+
+
+
+
+
+
+
+    The API can return information for cards, checking, savings, loans, line of credit and bokerage accounts. We are working hard to extend this API to return additional types of accounts. Stay tuned for more!
+basePath: /gcb//api
+schemes:
+- https
+tags: []
+paths:
+  /v2/accounts/details:
+    get:
+      summary: Retrieve details of all accounts
+      description: Returns account details for all accounts held by Citi customers
+        who have authorized your app. For example, if a customer has multiple credit
+        card accounts, the accounts will be returned in the array creditCardAccountsDetails
+        within accountGroupDetails.<br>Currently, the API supports cards, checking
+        & savings, loans, line of credit, brokerage and retirement accounts.
+      parameters:
+      - name: Authorization
+        in: header
+        description: 'The most recent Authorization token. This will have the format
+          Bearer + {space} + {accessToken}. Example: Bearer KGNsaWVudF9pZDpjbGllbnRfc2VjcmV0KQ==.'
+        type: string
+        required: true
+      - name: uuid
+        in: header
+        description: 128 bit random UUID generated uniquely for every request
+        type: string
+        required: true
+      - name: Accept
+        in: header
+        description: Content-Type that are acceptable for the response
+        type: string
+        required: true
+      - name: client_id
+        in: header
+        description: client_id generated during consumer onboarding
+        type: string
+        required: true
+      responses:
+        200:
+          description: Successful operation
+          schema:
+            $ref: '#/definitions/AccountsGroupDetailsList'
+        400:
+          description: <table class="table"><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>invalid</td><td>invalidRequest</td><td>Missing
+            or invalid parameters</td></tr><tr><td>error</td><td>noAccounts</td><td>No
+            active accounts or No accounts linked for customer</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        401:
+          description: <table class="table"><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>error</td><td>unAuthorized</td><td>Authorization
+            credentials are missing or invalid</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        403:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td><td>More
+            Info</td></tr><tr><td>error</td><td>accessNotConfigured</td><td>The request
+            operation is not configured to access this resource</td><td>Channel/Country/Business
+            provided in the request is not supported currently</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        404:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>fatal</td><td>serverUnavailable</td><td>The
+            request failed due to an internal error/server unavailability</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        500:
+          description: <table class="table"><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>fatal</td><td>serverUnavailable</td><td>The
+            request failed due to an internal error</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+  /v2/accounts/{accountId}/encrypt/accountRoutingNumber:
+    get:
+      description: Retrieve routing number(clear text) and encrypted account number
+        of a specific account
+      summary: Retrieve routing number(clear text) and encrypted account number of
+        a specific account
+      parameters:
+      - name: accountId
+        in: path
+        description: Encrypted Account token or account guid
+        required: true
+        type: string
+      - name: Authorization
+        in: header
+        description: Oauth Header
+        required: true
+        type: string
+      - name: uuid
+        in: header
+        description: 128 bit random UUID generated uniquely for every request
+        required: true
+        type: string
+      - name: Accept
+        in: header
+        description: Content-Type that are acceptable for the response
+        required: true
+        type: string
+      - name: client_id
+        in: header
+        description: client_id generated during consumer onboarding
+        required: true
+        type: string
+      responses:
+        200:
+          description: Successful operation.
+          schema:
+            $ref: '#/definitions/EncryptedAccountRoutingNumber'
+        400:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>error</td><td>invalidRequest</td><td>Missing
+            or invalid Parameters</td></tr></table>
+          schema:
+            $ref: '#/definitions/Http400Response'
+        401:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>error</td><td>unAuthorized</td><td>Authorization
+            credentials are missing or invalid</td></tr></table>
+          schema:
+            $ref: '#/definitions/Http401Response'
+        403:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td><td>More
+            Info</td></tr><tr><td>error</td><td>accessNotConfigured</td><td>The request
+            operation is not configured to access this resource</td><td>Channel/Country/Business
+            provided in the request is not supported currently</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        404:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>error</td><td>resourceNotFound</td><td>The
+            requested resource was not found</td></tr></table>
+          schema:
+            $ref: '#/definitions/Http404Response'
+        500:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>fatal</td><td>serverUnavailable</td><td>The
+            request failed due to an internal error/server unavailability</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+  /v2/accounts/{accountId}/transactions:
+    get:
+      summary: Retrieve transactions
+      description: Returns an array of transactions for the specified account. For
+        example, the transactions for a credit card account will be returned in a
+        creditCardAccountTransactions array object. <br>Currently, the API supports
+        cards, checking, savings, loans, line of credit and brokerage account transactions.
+      parameters:
+      - name: accountId
+        in: path
+        description: Temporary unique identifier associated with an account
+        required: true
+        type: string
+      - name: transactionFromDate
+        in: query
+        description: Starting range for transaction date in ISO 8601 date format 'YYYY-MM-DD'.
+        type: string
+        required: true
+        format: date
+      - name: transactionToDate
+        in: query
+        description: End range for transaction date in ISO 8601 date format 'YYYY-MM-DD'.
+          If transactionToDate is present, transactionFromDate is required.
+        type: string
+        format: date
+      - name: Authorization
+        in: header
+        description: The Authorization Token received in earlier API call. This will
+          contain the Access Token
+        type: string
+        required: true
+      - name: uuid
+        in: header
+        description: A 128 bit universally unique identifier (UUID) that you generate
+          for every request and is used for tracking. It is recommended to use the
+          output from Java UUID class or an equivalent
+        type: string
+        required: true
+      - name: Accept
+        in: header
+        description: Content-Types that are acceptable for the response.
+        type: string
+        required: true
+      - name: client_id
+        in: header
+        description: The client_id generated during consumer onboarding
+        type: string
+        required: true
+      responses:
+        200:
+          description: Successful operation
+          schema:
+            $ref: '#/definitions/GetAccountTransactionsResp'
+        204:
+          description: No Content
+        400:
+          description: <table> <tr> <td>error</td> <td>invalidRequest</td> <td>Missing
+            or invalid request parameters</td> </tr> <tr> <td>error</td> <td>invalidTransactionFromDate</td><td>The
+            transactionFromDate provided is invalid. The date format is YYYYMMDD.</td>
+            </tr> <tr> <td>error</td> <td>invalidTransactionToDate</td><td>The transactionToDate
+            provided is invalid. The date format is YYYYMMDD.</td></tr> <tr> <td>error</td>
+            <td>transactionFromToDateComboInvalid</td><td>The transactionFromDate
+            value is greater (later) than the transactionToDate value.</td> </tr>
+            <tr> <td>error</td> <td>tranxFromDate2YrsPriorToCurrDate</td><td>Transaction
+            from date should not be 24 months prior to current date.</td></tr> <tr>
+            <td>error</td> <td>tranxToDateAfterCurrDate</td> <td>Transaction to date
+            should not be after current date.</td> </tr> </table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        401:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>error</td><td>unAuthorized</td><td>Authorization
+            credentials are missing or invalid</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        403:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td><td>More
+            Info</td></tr><tr><td>error</td><td>accessNotConfigured</td><td>The request
+            operation is not configured to access this resource</td><td>Channel/Country/Business
+            provided in the request is not supported currently</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        404:
+          description: <table> <tr> <td>Type</td> <td>Code</td> <td>Details</td></tr>
+            <tr> <td>error</td> <td>resourceNotFound</td> <td>Resource not found</td>
+            </tr> </table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+        500:
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>fatal</td><td>serverUnavailable</td><td>The
+            request failed due to an internal error</td></tr></table>
+          schema:
+            $ref: '#/definitions/ErrorList'
+definitions:
+  EncryptedAccountRoutingNumber:
+    properties:
+      encryptedAccountNumber:
+        type: object
+        properties:
+          encryptedPayload:
+            type: object
+            description: Encrypted Account number object with details to decrypt in
+              header
+            required:
+            - encrypted_key
+            - iv
+            - ciphertext
+            - authTag
+            - aad
+            properties:
+              header:
+                type: object
+                required:
+                - alg
+                - enc
+                - kid
+                - x5c
+                - cty
+                properties:
+                  zip:
+                    type: string
+                    description: The zip (compression algorithm) Header Parameter,
+                      which is optional, is applied to the plaintext before encryption,
+                      if any. Default value of zip is Compression with the DEFLATE
+                      algorithm
+                    example: DEF
+                    default: DEF
+                  alg:
+                    type: string
+                    description: The alg (algorithm) Header Parameter identifies the
+                      cryptographic algorithm used to encrypt or determine the value
+                      of the CEK
+                    example: RSA-OAEP-256
+                  enc:
+                    type: string
+                    description: The enc (encryption algorithm) Header Parameter identifies
+                      the content encryption algorithm used to perform authenticated
+                      encryption on the plaintext to produce the ciphertext and the
+                      Authentication Tag
+                    example: A256CBC-HS512
+                  kid:
+                    type: string
+                    description: The kid (key ID) Header Parameter is a Hint indicating
+                      which key was used to secure the JWE
+                    example: Citi_2020-02-10
+                  x5c:
+                    type: object
+                    $ref: '#/definitions/X5Certificates'
+                    description: The x5u (X.509 URL) Header Parameter is a URI that
+                      refers to a resource for the X.509 public key certificate or
+                      certificate chain corresponding to the key used to digitally
+                      sign the JWS
+                  cty:
+                    type: string
+                    description: The cty (content type) Header Parameter is used by
+                      JWS applications to declare the media type [IANA.MediaTypes]
+                      of the secured content (the payload)
+                    example: text/plain
+              encrypted_key:
+                type: string
+                description: Base64encoded JWE Encrypted key
+                example: 8b3021f817b01a64c419213d70bbd0552c
+              iv:
+                type: string
+                description: Initialization vector
+                example: cf532cc7c81046e66541791001
+              ciphertext:
+                type: string
+                description: Encrypted account number text
+                example: 47ecwvmLhO1amdatjLdSr8Q+B8CRVXUX6Ez7JiFieEaeKtrRu99JDoX4u1FQarMkZZDaJ65
+                  eVuZ4RXU4xvNeEJHToQx3iboo1hyDLOhMdoSLPJQfx46
+              authTag:
+                type: string
+                description: An output of an AEAD operation that ensures the integrity
+                  of the ciphertext and the Additional Authenticated Data. Note that
+                  some algorithms may not use an Authentication Tag, in which case
+                  this value is the empty octet sequence.
+                example: PGdwAzKMbpt9jTE6YDEZ2GNMCTlrPuL4Hu2gAFOtZbA
+              aad:
+                type: string
+                description: Additional Authenticated Data value to be integrity protected
+                  by the authenticated encryption operation.  This can only be present
+                  when using the JWE JSON Serialization.  (Note that this can also
+                  be achieved when using either the JWE Compact Serialization or the
+                  JWE JSON Serialization by including the AAD value as an integrity-protected
+                  Header Parameter value, but at the cost of the value being double
+                  base64url encoded.)
+                example: n_WoDmI9OQFDy4suLquWqKNoctGXQIjpjNGOrUD2uDk7gzJBSSaiD4UYdise45GhaVhbiZeVU
+      routingNumber:
+        type: string
+        description: ABA routing number. Conditional on Checking & Savings Accounts
+          only; will not be returned otherwise.
+        example: "122401710"
+  Http400Response:
+    properties:
+      code:
+        type: string
+        example: invalidRequest
+      type:
+        type: string
+        example: invalid
+      moreInformation:
+        type: string
+        example: Missing or invalid parameters
+  Http404Response:
+    properties:
+      httpCode:
+        type: string
+        example: "404"
+      httpMessage:
+        type: string
+        example: Not Found
+      moreInformation:
+        type: string
+        example: No resources match requested URI
+  Http401Response:
+    properties:
+      code:
+        type: string
+        example: "401"
+      type:
+        type: string
+        example: unAuthorized
+      moreInformation:
+        type: string
+        example: Authorization credentials are missing or invalid
+  AccountsGroupDetailsList:
+    properties:
+      accountGroupDetails:
+        type: array
+        description: Detailed list of every account group held by customer. accountGroupDetails
+          is only applicable when the customer has more than one account
+        items:
+          $ref: '#/definitions/AccountGroupDetails'
+      customer:
+        $ref: '#/definitions/Customer'
+  AccountGroupDetails:
+    properties:
+      accountGroup:
+        type: string
+        description: 'Account group is a classification of accounts according to their
+          common characteristics. Values include: CHECKING, SAVINGS, CREDITCARD, LOAN,
+          LINEOFCREDIT, BROKERAGE AND RETIREMENT'
+        example: CHECKING
+        enum:
+        - CHECKING
+        - SAVINGS
+        - CREDITCARD
+        - LOAN
+        - LINEOFCREDIT
+        - BROKERAGE
+        - RETIREMENT
+      checkingAccountsDetails:
+        type: array
+        description: List of Checking Accounts and the summary information which includes
+          totalCurrentBalance and totalAvailableBalance
+        items:
+          $ref: '#/definitions/CheckingAccountDetailsList'
+      savingsAccountsDetails:
+        type: array
+        description: List of Savings Accounts and the summary information which includes
+          totalCurrentBalance and totalAvailableBalance
+        items:
+          $ref: '#/definitions/SavingsAccountDetailsList'
+      creditCardAccountsDetails:
+        type: array
+        description: List of Credit Card Accounts and the summary information which
+          includes totalCurrentBalance
+        items:
+          $ref: '#/definitions/CreditCardAccountDetailsList'
+      loanAccountsDetails:
+        type: array
+        description: List of Loan Accounts details
+        items:
+          $ref: '#/definitions/LoanAccountDetailsList'
+      lineOfCreditAccountsDetails:
+        type: array
+        description: List of Line of Credit and Checking Plus Accounts
+        items:
+          $ref: '#/definitions/LineOfCreditAccountDetailsList'
+      brokerageAccountsDetails:
+        type: array
+        description: List of Brokerage Accounts Details
+        items:
+          $ref: '#/definitions/BrokerageAccountDetailsList'
+      retirementAccountsDetails:
+        type: array
+        description: List of Retirement Accounts details
+        items:
+          $ref: '#/definitions/RetirementAccountDetailsList'
+      totalCurrentBalance:
+        $ref: '#/definitions/GroupBalance'
+      totalAvailableBalance:
+        $ref: '#/definitions/GroupBalance'
+    required:
+    - accountGroup
+  CreditCardAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - currencyCode
+    - accountStatus
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Citi Rewards+℠ Card
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Citi Rewards+℠ Card - 7899
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance)
+        enum:
+        - ASSET
+        - LIABILITY
+        example: LIABILITY
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - Should only show the last 4 digits of the
+          account number, with the remaining numbers masked as "X"
+        example: XXXXXXXXXXXX7899
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: 8035a60debb671e89bd451c9ad0f283e8f1b8868dd4dc65520ceb7bdfeb4142999f574c9db37917ef0edfae296745142543e3ad2bc034887f37212ecbde83ee0
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      accountStatus:
+        type: string
+        description: The status of the account.
+        enum:
+        - ACTIVE
+        - INACTIVE
+        - CLOSED
+        example: ACTIVE
+      availableCredit:
+        description: The amount of credit that is available to the end customer to
+          use.
+        type: number
+        format: double
+        example: 15000
+      creditLimit:
+        description: The maximum amount of credit extended to the customer for that
+          account.
+        type: number
+        format: double
+        example: 20000
+      purchasesAPR:
+        description: APR for credit card purchases.
+        type: number
+        format: double
+        example: 23.450000
+      minimumDueAmount:
+        description: The minimum payment amount due at the payment due date for the
+          current cycle.
+        type: number
+        format: double
+        example: 1500
+      paymentDueDate:
+        description: The upcoming payment due date in YYYY-MM-DD format for the current
+          cycle.
+        type: string
+        format: date
+        example: "2017-03-27"
+      currentBalance:
+        description: For credit card accounts, this is the total balance owed on the
+          credit account, including last statement balance and posted transactions
+          since last statement less any payments or credits. This is the total balance
+          on the account including delinquencies. This can be positive or negative
+          values and up to 2 decimal places, e.g. 1, 1.01, -2.34.
+        type: number
+        format: double
+        example: 10000.250000
+      lastStatementBalance:
+        description: Total amount  owed on the credit card up to the end of the most
+          recent statement cycle.
+        type: number
+        format: double
+        example: 5000.250000
+      lastStatementDate:
+        type: string
+        format: date
+        description: The date of the last credit card statement in ISO 8601 YYYY-MM-DD
+          date format.
+        example: "2019-02-27"
+      advancesAPR:
+        description: APR for cash advances.
+        type: number
+        format: double
+        example: 23.450000
+      cashAdvanceLimit:
+        type: number
+        format: double
+        description: The maximum amount of cash advance extended to the customer for
+          that account, which is taken as a percentage of credit limit to withdraw
+          cash.
+        example: 5000
+      cashAdvanceAvailableAmount:
+        type: number
+        format: double
+        description: Cash advance amount available.
+        example: 2500
+      lastPaymentAmount:
+        type: number
+        format: double
+        description: The last credit card payment amount made.
+        example: 1500.250000
+      lastPaymentDate:
+        type: string
+        format: date
+        description: The date of the last credit card payment in ISO 8601 YYYY-MM-DD
+          date format.
+        example: "2019-06-12"
+      ctdPurchaseBalanceAmount:
+        type: number
+        format: double
+        description: Current Spend Amount for Authorized User. Conditional on specific
+          product types and/or spend limits; will not be returned otherwise.
+        example: 300.250000
+      purchaseSpendLimitAmount:
+        type: number
+        format: double
+        description: Spend Limit assigned to Authorized User by Primary Account Owner.
+          Conditional on specific product types and/or spend limits; will not be returned
+          otherwise.
+        example: 2000
+      remainingPurchaseSpendAmount:
+        type: number
+        format: double
+        description: Remaining Spend Amount for Authorized User. Conditional on specific
+          product types and/or spend limits; will not be returned otherwise.
+        example: 1699.750000
+  CheckingAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - currencyCode
+    - accountStatus
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Business Checking
+      accountNickname:
+        type: string
+        description: The nickname of the account assigned by the end customer.
+        example: My checking account
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Business Checking - 9594
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance).
+        enum:
+        - ASSET
+        - LIABILITY
+        example: ASSET
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - Should only show the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXXX9594
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      accountStatus:
+        type: string
+        description: The status of the account.
+        enum:
+        - ACTIVE
+        - INACTIVE
+        - CLOSED
+        example: ACTIVE
+      currentBalance:
+        description: For checking and saving accounts, this is the current balance
+          of funds in the account including available balance and any pending or in
+          progress deposits and withdrawals. May be referred to as ledger balance.
+        type: number
+        format: double
+        example: 10000.250000
+      availableBalance:
+        description: The amount of funds available in the account to withdraw, deposit
+          or transfer.
+        type: number
+        format: double
+        example: 15000.250000
+  SavingsAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - currencyCode
+    - accountStatus
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Citi Gold Savings Account
+      accountNickname:
+        type: string
+        description: The nickname of the account assigned by the end customer.
+        example: Personal Savings Account
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Citi Gold Savings Account - 2033
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance)
+        enum:
+        - ASSET
+        - LIABILITY
+        example: ASSET
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - Should only show the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXXX2033
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      accountStatus:
+        type: string
+        description: The status of the account.
+        enum:
+        - ACTIVE
+        - INACTIVE
+        - CLOSED
+        example: ACTIVE
+      currentBalance:
+        description: For checking and saving accounts, this is the current balance
+          of funds in the account including available balance and any pending or in
+          progress deposits and withdrawals. May be referred to as ledger balance.
+        type: number
+        format: double
+        example: 10000.250000
+      availableBalance:
+        description: The amount of funds available in the account to withdraw, deposit
+          or transfer. Not applicable for CD accounts; will be present otherwise.
+        type: number
+        format: double
+        example: 15000.250000
+      maturityDate:
+        type: string
+        format: date
+        description: Maturity Date in ISO 8601 YYYY-MM-DD format. Conditional on CD
+          Accounts only; will not be present otherwise
+        example: "2020-06-03"
+      maturityTerm:
+        type: string
+        description: Maturity Term of the CD account. Conditional on CD Accounts only;
+          will not be present otherwise.
+        example: 2 years
+  LoanAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - currencyCode
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Personal Loan
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance).
+        enum:
+        - ASSET
+        - LIABILITY
+        example: LIABILITY
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - It displays only the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXX1035
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Personal Loan-1035
+      accountNickname:
+        type: string
+        description: The nickname of the account assigned by the customer.
+        example: My personal loan
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: d8cf4b23b3a7f74fd441e93697c15fe2fe8714afdfa1d1dc619b1d2ccda41edfa965598333d790b1e2de05a4c55176094a0cc632ff4ddbe9704f10e787fa64f9
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      currentBalanceAmount:
+        description: The total current balance amount available.
+        type: number
+        format: double
+        example: 10000
+      creditAvailableAmount:
+        description: The amount of credit that is available to the end customer to
+          use.
+        type: number
+        format: double
+        example: 9000
+      paymentDueAmount:
+        description: Next payment minimum amount.
+        type: number
+        format: double
+        example: 400
+      paymentDueDate:
+        description: The upcoming payment due date in YYYY-MM-DD format for the current
+          cycle.
+        type: string
+        format: date
+        example: "2017-03-27"
+      autoPayFlag:
+        description: Auto payment flag.
+        type: boolean
+        enum:
+        - true
+        - false
+        example: true
+      lastPaymentAmount:
+        description: Last payment received amount.
+        type: number
+        format: double
+        example: 500
+      lastPaymentDate:
+        description: The date of the last payment in ISO 8601 YYYY-MM-DD date format.
+        type: string
+        format: date
+        example: "2015-06-12"
+  LineOfCreditAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - currencyCode
+    - accountStatus
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Checking Plus Line of Credit
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance).
+        enum:
+        - ASSET
+        - LIABILITY
+        example: LIABILITY
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - It displays only the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXX1035
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Checking Plus Line of Credit-1035
+      accountNickname:
+        type: string
+        description: The nickname of the account assigned by the customer.
+        example: Checking plus account
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      accountStatus:
+        type: string
+        description: The status of the account. Conditional on CheckingPlus accounts
+          only; will not be present otherwise.
+        enum:
+        - ACTIVE
+        - INACTIVE
+        - CLOSED
+        example: ACTIVE
+      creditAvailableAmount:
+        description: Amount of Credit available. Applicable for Home Equity and personal
+          Lines of Credit.
+        type: number
+        format: double
+        example: 9000
+      currentBalanceAmount:
+        description: Current Balance owed, includes outstanding principal and interest
+          owed.
+        type: number
+        format: double
+        example: 10000
+      paymentDueAmount:
+        description: Next payment minimum amount.
+        type: number
+        format: double
+        example: 5000
+      lastPaymentAmount:
+        description: Last payment received amount.
+        type: number
+        format: double
+        example: 4000
+  RetirementAccountDetailsList:
+    required:
+    - productName
+    - displayAccountNumber
+    - accountId
+    - accountStatus
+    - balanceType
+    properties:
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Rollover IRA
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance).
+        enum:
+        - ASSET
+        - LIABILITY
+        example: ASSET
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - It displays only the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXX2766
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Rollover IRA-2766
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: bd0fbd58e6e3d2fec034a0f4d8a41f8f0533b7f93a02a11d3fa80f7a66c62ebdd77d0dd67787d4e4f0e4949116937f429748535d1698ae0bab6e7122e884bb02
+      accountValue:
+        type: number
+        format: double
+        description: Total Account Value.
+        example: 9000.150000
+      accountStatus:
+        type: string
+        description: The status of the account. Only ACTIVE Retirement Accounts are
+          returned.
+        enum:
+        - ACTIVE
+        example: ACTIVE
+      asOfDateTime:
+        type: string
+        format: date
+        description: Date of account value in YYYY-MM-DD format.
+        example: "2020-04-10"
+      retirementPlanComponents:
+        type: array
+        description: List of retirement plans.
+        items:
+          type: object
+          required:
+          - componentName
+          - currencyCode
+          - totalValueAmount
+          properties:
+            componentName:
+              type: string
+              description: Name of the retirement plan.
+              example: Variable CD-2766
+            currencyCode:
+              type: string
+              description: The currency code in ISO 4217 format.
+              example: USD
+            currentTerms:
+              type: string
+              description: Current terms of retirement plan. Conditional on Retirement
+                CD Accounts only; will not be present otherwise.
+              example: 2 years
+            totalValueAmount:
+              type: number
+              format: double
+              description: Total value.
+              example: 4676.360000
+            interestPaidYTD:
+              type: number
+              format: double
+              description: Interest paid year to date. Conditional on Retirement CD
+                Accounts only; will not be present otherwise
+              example: 324.120000
+            nextMaturityDate:
+              type: string
+              format: date
+              description: Next Maturity Date of retirement plan in ISO 8601 YYYY-MM-DD
+                format. Conditional on Retirement CD Accounts only; will not be present
+                otherwise
+              example: "2020-06-03"
+  BrokerageAccountDetailsList:
+    required:
+    - accountId
+    - accountRegistrationType
+    - accountTradingCapableFlag
+    - asOfDateTime
+    - brokerageAccountTransactionTypes
+    - displayAccountNumber
+    - balanceType
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identify the account. Note - It displays only the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXX1035
+      accountRegistrationType:
+        type: string
+        description: Type of the brokerage account.
+        enum:
+        - INDIVDUALINVESTMENTS
+        - TRADITIONALIRA
+        - ROTHIRA
+        - SEPIRA
+        - PLAN529
+        - RETIREMENT
+        - RETAIL
+        - RVP_DVP
+        - RETAIL_THIRD_PARTY_AS_CUSTODIAN
+        - SELF_DIRECTED_401K
+        - UNKNOWN
+        example: RETAIL
+      accountTradingCapableFlag:
+        type: boolean
+        description: Indicator to determine whether account is allowed for Trading.
+        enum:
+        - true
+        - false
+        example: true
+      balanceType:
+        type: string
+        description: Indicates the balance type for an account, whether it is an ASSET
+          or a LIABILITY for the customer. Valid values include - ASSET (positive
+          transaction amount increases balance), LIABILITY (positive transaction amount
+          decreases balance).
+        enum:
+        - ASSET
+        - LIABILITY
+        example: ASSET
+      productName:
+        type: string
+        description: Citi’s product name.
+        example: Brokerage IRA
+      accountDescription:
+        type: string
+        description: Description of end customer's account indicating the product
+          name and the last 4 digits of their account number.
+        example: Brokerage IRA-1035
+      brokerageAccountTransactionTypes:
+        type: array
+        description: List of brokerage account transaction types handled by this account.
+        items:
+          $ref: '#/definitions/BrokerageAccountTransactionType'
+      accountHoldings:
+        type: array
+        description: List of holdings for this brokerage account.
+        items:
+          $ref: '#/definitions/AccountHolding'
+      totalPortfolioBalanceAmount:
+        type: number
+        format: double
+        description: Total balance amount of Brokerage portfolio. Note this might
+          not exactly equal the sum of all Brokerage holdings due to frequency of
+          security price fluctuations.
+        example: "3643150.72"
+  AccountHolding:
+    required:
+    - currencyCode
+    - cusip
+    - holdingCategory
+    properties:
+      currencyCode:
+        type: string
+        description: The currency code in ISO 4217 format.
+        example: USD
+      cusip:
+        type: string
+        description: CUSIP of the security held. A CUSIP is a nine-digit numeric or
+          nine-character alphanumeric code that identifies a North American financial
+          security for the purposes of facilitating clearing and settlement of trades.
+        example: "140194101"
+      holdingCategory:
+        type: string
+        description: Holding category.
+        enum:
+        - Fixed Income
+        - Cash, Money Funds, Bank Deposits
+        - Mutual Funds
+        - Equities
+        - Others
+        example: Equities
+      quantity:
+        type: number
+        description: Quantity owned for the holding.
+        example: 100
+      securityName:
+        type: string
+        description: Name of the holding.
+        example: American Funds Capital Income Builder.
+      asOfDateTime:
+        type: string
+        format: date
+        description: Timestamp of account value in yyyy-MM-dd'T'HH:mm:ss.SSSZ format.
+          Z is the timezone and +0000 denotes UTC time.
+        example: "2020-01-21T18:28:00.000+0000"
+      assetClass:
+        type: string
+        description: Name of the asset class.
+        enum:
+        - FIXED INCOME
+        - CASH
+        - MUTUAL FUND
+        - EQUITY
+        - OTHER
+        example: EQUITY
+      symbol:
+        type: string
+        description: Symbol of the security held.  A stock symbol is a unique series
+          of letters assigned to a security for trading purposes.
+        example: CAIFX
+      price:
+        type: number
+        format: double
+        description: Current price of the security.
+        example: 32.410000
+      totalValueAmount:
+        type: number
+        format: double
+        description: Total value.
+        example: 324.100000
+      changeInPercent:
+        type: number
+        format: double
+        description: Difference in the percentage. Default is +, can come with - sign.
+        example: -0.100000
+      changeInPrice:
+        type: number
+        format: double
+        description: Difference in the price. Default is +, can come with - sign.
+        example: -0.015000
+      changeInValue:
+        type: number
+        format: double
+        description: Change value of total value. Default is +, can come with - sign.
+        example: -10.000000
+      previousPrice:
+        type: number
+        format: double
+        description: Previous price of the security.
+        example: 31
+  BrokerageAccountTransactionType:
+    type: string
+    description: Brokerage account transaction type.
+    enum:
+    - CASH
+    - MARGIN
+    - NONE
+    example: CASH
+  GroupBalance:
+    properties:
+      localCurrencyCode:
+        type: string
+        description: The currency code for local country in ISO 4217 format
+        example: USD
+      localCurrencyBalanceAmount:
+        type: number
+        format: double
+        description: Summarized balances in local currency
+        example: 8900.120000
+  GetAccountTransactionsResp:
+    properties:
+      checkingAccountTransactions:
+        type: array
+        description: List of Checking Account Transactions
+        items:
+          $ref: '#/definitions/CheckingAccountTransaction'
+      savingsAccountTransactions:
+        type: array
+        description: List of Savings Account Transactions
+        items:
+          $ref: '#/definitions/SavingsAccountTransaction'
+      creditCardAccountTransactions:
+        type: array
+        description: List of Credit Card Transactions
+        items:
+          $ref: '#/definitions/CreditCardAccountTransaction'
+      loanAccountTransactions:
+        type: array
+        description: List of Loan Account Transactions
+        items:
+          $ref: '#/definitions/LoanAccountTransaction'
+      lineOfCreditAccountTransactions:
+        type: array
+        description: List of Line of Credit and Checking Plus Transactions
+        items:
+          $ref: '#/definitions/LineOfCreditAccountTransaction'
+      brokerageAccountTransactions:
+        type: array
+        description: List of Brokerage account Transactions
+        items:
+          $ref: '#/definitions/BrokerageAccountTransaction'
+  CheckingAccountTransaction:
+    required:
+    - transactionAmount
+    - transactionDate
+    - accountId
+    - currencyCode
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      checkNumber:
+        type: integer
+        description: This field will be populated if the transaction is a check deposit
+          or withrawal.
+        example: 1007
+      currencyCode:
+        type: string
+        description: The currency code of the transaction in ISO 4217 format
+        example: USD
+      debitCreditMemo:
+        $ref: '#/definitions/DebitCreditMemo'
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the customer
+        example: XXXXX1035
+      transactionAmount:
+        type: number
+        format: double
+        description: The transaction amount, in the primary currency of the account.
+        example: 12.220000
+      transactionDate:
+        type: string
+        format: date
+        description: Date merchant did the sale to the customer in ISO 8601 YYYY-MM-DD
+          format.
+        example: "2016-04-15"
+      transactionDescription:
+        type: string
+        description: Description explaining the details of the transaction.
+        example: AUTOMATED PHONE + TRANSFER FROM April 15 10:35 5058
+      transactionDescriptionExtension:
+        type: string
+        description: Additional transaction description,
+        example: TELEPHONE Reference# 545226
+      transactionId:
+        type: string
+        description: transaction Id to uniquely identify the transaction within an
+          account. Conditional on transaction type and status; not available for pending
+          and system-generated transactions
+        example: 0507777777777000001519171200000
+      transactionStatus:
+        type: string
+        description: The status of the transaction. Valid values are either PENDING
+          or POSTED
+        enum:
+        - PENDING
+        - POSTED
+        example: POSTED
+      transactionType:
+        type: string
+        description: The type of transaction which indicates type of debit or credit
+          transaction. Valid Values for checking and saving transactions include -
+          DEPOSIT, PAYMENT, TRANSFER, WITHDRAWAL_OR_DEPOSIT, WITHDRAWAL, DIVIDEND_AND_INTEREST,
+          FEES, ADJUSTMENTS,  TRANSACTION_VOID and FEE_WAIVED.
+        enum:
+        - DEPOSIT
+        - PAYMENT
+        - TRANSFER
+        - WITHDRAWAL_OR_DEPOSIT
+        - WITHDRAWAL
+        - DIVIDEND_AND_INTEREST
+        - FEES
+        - ADJUSTMENTS
+        - TRANSACTION_VOID
+        - FEE_WAIVED
+        - OTHER
+        example: PAYMENT
+  SavingsAccountTransaction:
+    required:
+    - transactionAmount
+    - transactionDate
+    - accountId
+    - currencyCode
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      checkNumber:
+        type: integer
+        description: This field will be populated if the transaction is a check deposit
+          or withrawal.
+        example: 1007
+      currencyCode:
+        type: string
+        description: The 3-character currency code in ISO 4217 format that identifies
+          the currency type for the transaction.
+        example: USD
+      debitCreditMemo:
+        $ref: '#/definitions/DebitCreditMemo'
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identity the account. Note - Should only show the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXX1035
+      transactionAmount:
+        type: number
+        format: double
+        description: The transaction amount, in the primary currency of the account.
+        example: 244.220000
+      transactionDate:
+        type: string
+        format: date
+        description: Date merchant did the sale to the customer in ISO 8601 YYYY-MM-DD
+          format.
+        example: "2016-04-15"
+      transactionDescription:
+        type: string
+        description: Description explaining the details of the transaction.
+        example: PRE-AUTHORIZED TRANSFER TO CHECKING PLUS
+      transactionDescriptionExtension:
+        type: string
+        description: Additional transaction description,
+        example: OTHER DECREASE
+      transactionId:
+        type: string
+        description: transaction Id to uniquely identify the transaction within an
+          account. Conditional on transaction type and status; not available for pending
+          and system-generated transactions
+        example: 0507777777777000001519171200000
+      transactionStatus:
+        type: string
+        description: The status of the transaction. Valid values are either PENDING
+          or POSTED
+        enum:
+        - PENDING
+        - POSTED
+        example: POSTED
+      transactionType:
+        type: string
+        description: The type of transaction which indicates type of debit or credit
+          transaction. Valid Values for checking and saving transactions include -
+          DEPOSIT, PAYMENT, TRANSFER, WITHDRAWAL_OR_DEPOSIT, WITHDRAWAL, DIVIDEND_AND_INTEREST,
+          FEES, ADJUSTMENTS,  TRANSACTION_VOID and FEE_WAIVED.
+        enum:
+        - DEPOSIT
+        - PAYMENT
+        - TRANSFER
+        - WITHDRAWAL_OR_DEPOSIT
+        - WITHDRAWAL
+        - DIVIDEND_AND_INTEREST
+        - FEES
+        - ADJUSTMENTS
+        - TRANSACTION_VOID
+        - FEE_WAIVED
+        - OTHER
+        example: PAYMENT
+  CreditCardAccountTransaction:
+    required:
+    - transactionAmount
+    - transactionDate
+    - transactionStatus
+    - transactionType
+    - accountId
+    - currencyCode
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      currencyCode:
+        type: string
+        description: The 3-character currency code in ISO 4217 format that identifies
+          the currency type for the transaction.
+        example: USD
+      debitCreditMemo:
+        $ref: '#/definitions/DebitCreditMemo'
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+          to identity the account. Note - Should only show the last 4 digits of the
+          account number, with the remaining numbers masked as "X".
+        example: XXXXX1035
+      foreignCurrency:
+        type: number
+        format: double
+        description: The transaction amount and desciption in the foreign currency
+        example: "22.16"
+      merchantCategory:
+        type: string
+        description: A merchant category (MCC or SIC) code is a four-digit number
+          assigned to a business by credit card companies (for instance, American
+          Express, MasterCard, VISA) when the business first starts accepting one
+          of these cards as a form of payment.
+        example: "4411"
+      merchantDescription:
+        type: string
+        description: The description of the standard merchant category.
+        example: CRUISE LINES
+      merchantCountry:
+        type: string
+        description: The country where the merchant is located. Note - This field
+          will come unformatted from Citi's system. e.g. SAN FRANCISCO CA for a transaction
+          in USA, TUR for a transaction in Turkey.
+      transactionDate:
+        type: string
+        format: date
+        description: Date merchant did the sale to the customer in ISO 8601 YYYY-MM-DD
+          format.
+        example: "2016-04-15"
+      transactionPostingDate:
+        type: string
+        format: date
+        description: The date that the transaction was posted to the account and into
+          Citi's system in YYYY-MM-DD format. Conditional on transaction type and
+          status; not available for PENDING and UNPROCESSED_PAYMENTS transactionStatus
+        example: "2016-04-16"
+      transactionId:
+        type: string
+        description: transaction Id to uniquely identify the transaction within an
+          account. Conditional on transaction type and status; not available for pending
+          and system-generated transactions
+        example: "172470002"
+      transactionAmount:
+        type: number
+        format: double
+        description: The transaction amount, in the primary currency of the account
+        example: 50.550000
+      transactionDescription:
+        type: string
+        description: Transaction description
+        example: PRE-AUTHORIZED TRANSFER TO CreditCard
+      transactionStatus:
+        type: string
+        description: The status of the transaction. Valid values are either PENDING,
+          BILLED, UNBILLED, UNPROCESSED_PAYMENTS.
+        enum:
+        - PENDING
+        - BILLED
+        - UNBILLED
+        - UNPROCESSED_PAYMENTS
+        example: BILLED
+      transactionType:
+        type: string
+        description: The type of transaction which indicates type of debit or credit
+          transaction. Valid values for credit card transactions include PAYMENT,
+          PURCHASE, CASH_ADVANCES, FEES, INTEREST_CHARGES, ADJUSTMENT and CREDIT.
+        enum:
+        - PAYMENT
+        - PURCHASE
+        - CASH_ADVANCES
+        - FEES
+        - INTEREST_CHARGES
+        - ADJUSTMENT
+        - CREDIT
+        example: PAYMENT
+      memberName:
+        type: string
+        description: name of the authorized user who made the transaction in case
+          of authorized users. Conditional on certain Product Type; Optional and may
+          not be returned otherwise
+        example: ISLASHERNANDEZ,WERNER
+  LoanAccountTransaction:
+    required:
+    - transactionAmount
+    - transactionDate
+    - transactionType
+    - accountId
+    - currencyCode
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+        example: XXXXX1035
+      transactionDate:
+        type: string
+        format: date
+        description: Transaction timestamp in ISO 8601 YYYY-MM-DD format
+        example: "2016-04-15"
+      transactionType:
+        type: string
+        description: The type of transaction.  Valid values are PAYMENT, PURCHASE,
+          CASH_ADVANCE, FEE, INTEREST_CHARGED, PURCHASE_CREDIT and CREDIT
+        enum:
+        - PAYMENT
+        - PURCHASE
+        - CASH_ADVANCE
+        - FEE
+        - INTEREST_CHARGED
+        - PURCHASE_CREDIT
+        - CREDIT
+        example: PURCHASE
+      transactionAmount:
+        type: number
+        format: double
+        description: The transaction amount, in the primary currency of the account
+        example: 50.550000
+      debitCreditMemo:
+        $ref: '#/definitions/DebitCreditMemo'
+      transactionId:
+        type: string
+        description: Transaction Id to uniquely identify the transaction. 'Conditional
+          on transaction type and status; not available for pending and system-generated
+          transactions
+        example: 464684877
+      transactionDescription:
+        type: string
+        description: Description explaining the details of the transaction.
+        example: Loan payment for the month of June
+      transactionDescriptionExtension:
+        type: string
+        description: Additional transaction description,
+        example: TELEPHONE Reference# 545226
+      transactionStatus:
+        type: string
+        description: The status of the transaction. Valid values are either PENDING
+          or POSTED
+        enum:
+        - PENDING
+        - POSTED
+        example: POSTED
+      transactionPostingDate:
+        type: string
+        format: date
+        description: The date that the transaction was posted to the account and into
+          Citi's system in YYYY-MM-DD format (EST).
+        example: "2016-04-16"
+      currencyCode:
+        type: string
+        description: The currency code is a 3-character code (ISO 4217 format) that
+          identifies the currency type for the customer's account and transaction.
+        example: USD
+      checkNumber:
+        type: string
+        description: Check number for loan transactions.
+        example: 1007
+  LineOfCreditAccountTransaction:
+    required:
+    - transactionAmount
+    - transactionDate
+    - transactionType
+    - accountId
+    - currencyCode
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: da549a7cc86472ee05272c7bd0a4483f57174f2110e7ad961a267995031fda66c6d5475de467a65739750107b621e5a01be7cc0dc085a825fa384795904293f6
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the end customer
+        example: XXXXX1035
+      transactionDate:
+        type: string
+        format: date
+        description: Transaction timestamp in ISO 8601 YYYY-MM-DD format
+        example: "2016-04-15"
+      transactionType:
+        type: string
+        description: The type of transaction.  Valid values are PAYMENT, PURCHASE,
+          CASH_ADVANCE, FEE, INTEREST_CHARGED, PURCHASE_CREDIT and CREDIT
+        enum:
+        - PAYMENT
+        - PURCHASE
+        - CASH_ADVANCE
+        - FEE
+        - INTEREST_CHARGED
+        - PURCHASE_CREDIT
+        - CREDIT
+        example: PURCHASE
+      transactionAmount:
+        type: number
+        format: double
+        description: The transaction amount, in the primary currency of the account
+        example: 50.550000
+      debitCreditMemo:
+        $ref: '#/definitions/DebitCreditMemo'
+      transactionId:
+        type: string
+        description: Transaction Id to uniquely identify the transaction. Conditional
+          on transaction type and status; not available for pending and system-generated
+          transactions
+        example: 464684877
+      transactionDescription:
+        type: string
+        description: Description explaining the details of the transaction.
+        example: Loan payment for the month of June
+      transactionDescriptionExtension:
+        type: string
+        description: Additional transaction description,
+        example: TELEPHONE Reference# 545226
+      transactionStatus:
+        type: string
+        description: The status of the transaction. Valid values are either PENDING
+          or POSTED
+        enum:
+        - PENDING
+        - POSTED
+        example: POSTED
+      transactionPostingDate:
+        type: string
+        format: date
+        description: The date that the transaction was posted to the account and into
+          Citi's system in YYYY-MM-DD format (EST).
+        example: "2016-04-16"
+      currencyCode:
+        type: string
+        description: The currency code is a 3-character code (ISO 4217 format) that
+          identifies the currency type for the customer's account and transaction.
+        example: USD
+      checkNumber:
+        type: string
+        description: Check number for line of credit transactions.
+        example: 1007
+  BrokerageAccountTransaction:
+    required:
+    - accountId
+    - currencyCode
+    - assetClass
+    - assetType
+    - longActivityDescription
+    - shortActivityDescription
+    - transactionDateTime
+    - transactionId
+    - transactionType
+    - buySellIndicator
+    - securityIdentifier
+    properties:
+      accountId:
+        type: string
+        description: Long-term persistent identity of the account. Not an account
+          number.
+        example: c09d172a-d244-4324-bba9-b03b8aa17a76-INV
+      displayAccountNumber:
+        type: string
+        description: A masked account number that can be displayed to the customer
+        example: XXXXX1035
+      currencyCode:
+        type: string
+        description: The currency code of the transaction in ISO 4217 format
+        example: USD
+      securityIdentifier:
+        $ref: '#/definitions/SecurityIdentifier'
+      assetClass:
+        type: string
+        description: 'Asset class value displayed on the application for asset allocation
+          chart. Possible values: CORPDEBT, CURRENCY, EQUITY, ASSTBACK etc.'
+        example: CURRENCY
+      assetType:
+        type: string
+        description: 'Asset type assigned to a holding. Possible values: CORPDEBT,
+          CURRENCY, EQUITY, ASSTBACK etc.'
+        example: CORPDEBT
+      buySellIndicator:
+        $ref: '#/definitions/BuySellIndicatorType'
+      longActivityDescription:
+        type: string
+        description: Long activity description.
+        example: Sold 100 Shares of C @ $61.0
+      netAmount:
+        type: number
+        format: double
+        description: Net amount of transaction.
+        example: 10000
+      priceAmount:
+        type: number
+        format: double
+        description: Price amount of the security.
+        example: 10000
+      principalAmount:
+        type: number
+        format: double
+        description: Principal amount of trade. The amount of payment applied to the
+          principal. Only present for historical transactions, not intra-day
+        example: 10000
+      quantity:
+        type: number
+        format: double
+        description: Quantity of security at the time of trade.
+        example: 10000
+      settlementDate:
+        type: string
+        format: date
+        description: Settlement data of trade transaction.
+        example: "2016-04-15"
+      shortActivityDescription:
+        type: string
+        description: Short activity description.
+        example: Shares sold
+      tradeNumber:
+        type: string
+        description: Trade reference number of trade transactions.
+        example: "2788888886"
+      tradeTransactionFlag:
+        type: string
+        description: Flag to indicate trade related transaction.
+        example: true
+      transactionDateTime:
+        type: string
+        format: date
+        description: Transaction timestamp.
+        example: "2016-04-15"
+      transactionId:
+        type: string
+        description: TradeNumber is the identifier used to relate a transaction with
+          trade orders.
+        example: "7688682459"
+      transactionType:
+        type: string
+        description: 'PAYMENT, PURCHASE, CASH_ADVANCES, FEES,INTEREST_CHARGES, PURCHASE_CREDIT,
+          CREDIT, WITHDRAWAL_OR_DEPOSIT, SECURITY_TRANSACTION, DIVIDEND_AND_INTEREST,
+          OTHER, COMMON_STOCK_TRANSACTION, PREFERRED_STOCK_TRANSACTION, OPTIONS_TRANSACTION,
+          MUTUAL_FUND_TRANSACTION, BOND_TRANSACTION, CERTIFICATE_OF_DEPOSIT_TRANSACTION,
+          ADJUSTMENTS '
+        enum:
+        - PAYMENT
+        - PURCHASE
+        - CASH_ADVANCES
+        - FEES
+        - INTEREST_CHARGES
+        - PURCHASE_CREDIT
+        - CREDIT
+        - WITHDRAWAL_OR_DEPOSIT
+        - SECURITY_TRANSACTION
+        - DIVIDEND_AND_INTEREST
+        - OTHER
+        - COMMON_STOCK_TRANSACTION
+        - PREFERRED_STOCK_TRANSACTION
+        - OPTIONS_TRANSACTION
+        - MUTUAL_FUND_TRANSACTION
+        - BOND_TRANSACTION
+        - CERTIFICATE_OF_DEPOSIT_TRANSACTION
+        - ADJUSTMENTS
+        example: PAYMENT
+  SecurityIdentifier:
+    properties:
+      symbol:
+        type: string
+        description: Symbol of a traded security.
+        example: C
+      cusip:
+        type: string
+        description: Cusip of a traded security.
+        example: 172967GD7
+  BuySellIndicatorType:
+    type: string
+    description: Buy sell indicator type
+    enum:
+    - BUY
+    - SELL
+    - NONE
+    example: BUY
+  DebitCreditMemo:
+    type: string
+    description: Transaction feed indicator showing whether the transaction amount
+      is coming into account or going out of account. Valid values include - DEBIT,
+      CREDIT.
+    enum:
+    - DEBIT
+    - CREDIT
+    example: DEBIT
+  Customer:
+    properties:
+      customerId:
+        type: string
+        description: Unique Citi Customer ID number used to identify the end customer
+          and aggregate the end customer's different accounts, bringing those multiple
+          accounts into one value. Note - The Customer ID is a randomly generated
+          number and is created one time only. The Customer ID should not be displayed
+          to the end customer. The customer must have successfully authenticated for
+          this field to pass. This field is unique to the third party aggregator and
+          is persistent, i.e. a new customer ID field will be generated for each third
+          party’s customer.
+        example: bd12a6d89815aed77be876225b9a2c7f6648f0af82e84198f49d1b7e51a23fae1621936bc1addf5fdceca25c3aae5f92071fb1d6218dae32ca83b199c29962ee
+  X5Certificates:
+    type: array
+    items:
+      type: string
+    example:
+    - 07cceb63ea50b385336e7f6887
+    - MIID8TCCAtmgAwIBAgIUHhjRZWi
+  ErrorList:
+    properties:
+      errors:
+        type: array
+        description: List of one or more errors
+        items:
+          $ref: '#/definitions/ErrorResponse'
+  ErrorResponse:
+    properties:
+      type:
+        type: string
+        enum:
+        - error
+        - warn
+        - invalid
+        - fatal
+        description: <br>invalid - Request did not confirm to the specification and
+          was unprocessed & rejected. Please fix the value and try again</br>                         <br>warn
+          - Request was partially processed.  E.g. some of the fields are missing
+          in response to the system issues,  request was accepted successfully but
+          will be processed asynchronously</br> <br>error - The request was accepted
+          but could not be processed successfully</br>            <br>fatal - There
+          was an internal system error while processing the request. These are technical
+          errors and will be resolved by Citi, and the consumer should retry after
+          some time. Business errors will not be categorized as fatal </br>
+      code:
+        type: string
+        description: Error code which qualifies the error
+      details:
+        type: string
+        description: Human readable explanation specific to the occurrence of the
+          problem
+      location:
+        type: string
+        description: The name of the field that resulted in the error
+      moreInfo:
+        type: string
+        description: URI to human readable documentation of the error
+    required:
+    - type
+    - code
+consumes:
+- application/json
+produces:
+- application/json
+- charset=UTF-8
+host: sandbox.apihub.citi.com
+...

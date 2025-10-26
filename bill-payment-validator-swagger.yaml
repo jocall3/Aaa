@@ -1,0 +1,191 @@
+openapi: 3.0.1
+info:
+  title: Bill Payment Validator
+  version: 1.0.0
+
+  description: "The Bill Payment Validator service allows RPPS origination (payment sender) customers to identify if a potential RPPS transaction would process successfully before transmitting the formal payment transaction, reducing RPPS payment rejects and costly payment processing exceptions."
+  version: '1.0'
+  x-artifactId: 'billpay-api'
+  contact:
+    name: Bill Pay Development Support
+    email: Bill_Pay_Development_Support@mastercard.com
+host: sandbox.api.mastercard.com
+schemes:
+  - https
+basePath: /billpayAPI/v1
+produces:
+  - application/json
+consumes:
+  - application/json
+paths:
+  /isRoutingValid:
+    post:
+      summary: Bill Payment Validator service returns the processing status for a potential RPPS transaction
+      description: Bill Payment Validator performs real time transaction validation against the specified Biller ID's account masks, account check digits and all other registered RPPS processing parameters.
+      parameters:
+        - name: BillPayRequest
+          in: body
+          description: Contains the details of the get PAR API request message.
+          schema:
+            $ref: '#/definitions/BillPayRequest'
+      tags:
+        - RPPSPaymentValidatorAPI
+      responses:
+        200:
+          description: The Bill Payment Validator response.
+          schema:
+            $ref: '#/definitions/BillPayResponse'
+        default:
+          description: unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+      x-samples:
+        - 
+          name: example_billpay_routing_validation_request_explorer
+          type: documentation
+          request:
+            application/json: |-
+              {
+                  "BillPayAccountValidation": {
+                    "RppsId": "99887761",
+                    "BillerId": "9998887771",
+                    "AccountNumber": "1234567890",
+                    "TransactionAmount": "250.00",
+                    "CustomerIdentifier1": "",
+                    "CustomerIdentifier2": "",
+                    "CustomerIdentifier3": "",
+                    "CustomerIdentifier4": "",
+                    "ResponseString": ""
+                }
+              }
+          populateDefaults:
+            application/json: |-
+              {
+                "BillPayAccountValidation": {
+                  "RppsId": true,
+                  "BillerId": true,
+                  "AccountNumber": true,
+                  "TransactionAmount": true
+                }
+              }
+          response:
+            application/json: |-
+              {
+                  "BillPayAccountValidation": {
+                    "RppsId": "99887761",
+                    "BillerId": "9998887771",
+                    "AccountNumber": "1234567890",
+                    "TransactionAmount": "250.00",
+                    "CustomerIdentifier1": null,
+                    "CustomerIdentifier2": null,
+                    "CustomerIdentifier3": null,
+                    "CustomerIdentifier4": null,
+                    "ResponseString": "Successful"
+                }
+              }
+
+        - 
+          name: example_billpay_routing_validation_request
+          request:
+            application/json: |-
+              {
+                  "BillPayAccountValidation": {
+                    "RppsId": "99887761",
+                    "BillerId": "9998887771",
+                    "AccountNumber": "1234567890",
+                    "TransactionAmount": "250.00",
+                    "CustomerIdentifier1": "",
+                    "CustomerIdentifier2": "",
+                    "CustomerIdentifier3": "",
+                    "CustomerIdentifier4": "",
+                    "ResponseString": ""
+                }
+              }
+          response:
+            application/json: |-
+              {
+                  "BillPayAccountValidation": {
+                    "RppsId": "99887761",
+                    "BillerId": "9998887771",
+                    "AccountNumber": "1234567890",
+                    "TransactionAmount": "250.00",
+                    "CustomerIdentifier1": null,
+                    "CustomerIdentifier2": null,
+                    "CustomerIdentifier3": null,
+                    "CustomerIdentifier4": null,
+                    "ResponseString": "Successful"
+                }
+              }
+
+definitions:
+  BillPayRequest:
+    properties:
+      BillPayAccountValidation:
+        $ref: '#/definitions/BillPayAccountValidation' 
+  
+  BillPayResponse:
+    properties:
+      BillPayAccountValidation:
+        $ref: '#/definitions/BillPayAccountValidation' 
+  
+  BillPayAccountValidation:
+    properties:
+      RppsId:
+        type: string
+        description: Originator RPPS ID populated in the message.  The maximum length is 8
+        example: "99887761"
+      BillerId:
+        description: Biller ID populated in the message. The maximum length is 10.
+        type: string
+        example: "9998887771"
+      AccountNumber:
+        description: Consumer account number populated in the message.  The minimum length is 8 and the maximum length is 22.
+        type: string
+        example: "1234567890"
+      TransactionAmount:
+        description: Amount populated in the message.
+        type: string
+        example: "250.00"
+      CustomerIdentifier1:
+        description: Consumer identifier populated in the message.
+        type: string
+        example: ""
+      CustomerIdentifier2:
+        description: Consumer identifier populated in the message.
+        type: string
+        example: ""
+      CustomerIdentifier3:
+        description: Consumer identifier populated in the message.
+        type: string
+        example: ""
+      CustomerIdentifier4:
+        description: Consumer identifier populated in the message.
+        type: string
+        example: ""
+      ResponseString:
+        description: Indicates if the bill payment transaction information passed all RPPS transaction processing edits for the specified biller ID or indicates errors. The minimum length is 0 and the maximum length is 120.
+        type: string
+        example: "Successful"
+
+  ErrorResponse:
+    properties:
+      Errors:
+        $ref: '#/definitions/Errors'
+  
+  Errors:
+    properties:
+      Error:
+        type: array
+        items:
+          $ref: '#/definitions/Error'
+  
+  Error:
+    properties:
+      Source:
+        type: string
+        description: This is the unique identifier that attempts to define the field in error when available.  If a specific field can't be identified System will be returned.
+        example: Atms.Atm.Location.Address.Line1
+      ReasonCode:
+        type: string
+        description: This will identify the reason for the error.

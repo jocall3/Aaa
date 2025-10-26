@@ -1,0 +1,102 @@
+openapi: 3.0.1
+info:
+  title: Oauth2_Security_Idp
+  description: ob 3loa generate authorization_code Grant Type API-Proxy
+  version: 1.0.0
+servers:
+- url: /api/identity/v1
+tags: []
+paths:
+  /authcode/oauth2/authorize:
+    get:
+      tags: []
+      parameters:
+      - name: scope
+        in: query
+        schema:
+          type: string
+      - name: response_type
+        in: query
+        schema:
+          type: string
+      - name: redirect_uri
+        in: query
+        schema:
+          type: string
+      - name: businessCode
+        in: query
+        schema:
+          type: string
+      - name: locale
+        in: query
+        schema:
+          type: string
+      - name: state
+        in: query
+        schema:
+          type: string
+      - name: countryCode
+        in: query
+        schema:
+          type: string
+      - name: client_id
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: ""
+          headers:
+            orgname:
+              description: ""
+              schema:
+                type: string
+            appname:
+              description: ""
+              schema:
+                type: string
+            orgid:
+              description: ""
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: object
+components:
+  schemas:
+    ErrorResponse:
+      required:
+      - error
+      type: object
+      properties:
+        error_description:
+          type: string
+          description: "Human-readable ASCII [USASCII] text providing additional information,\
+            \ used to assist the client developer in understanding the error that\
+            \ occurred"
+        state:
+          type: string
+          description: REQUIRED if a "state" parameter was present in the client authorization
+            request.  The exact value received from the client.
+        error:
+          type: string
+          description: "If the request fails due to a missing, invalid, or mismatching\
+            \ redirection URI, or if the client identifier is missing or invalid,\
+            \ the authorization server SHOULD inform the resource owner of the error\
+            \ and MUST NOT automatically redirect the user-agent to the invalid redirection\
+            \ URI."
+          enum:
+          - invalid_request
+          - unauthorized_client
+          - access_denied
+          - unsupported_response_type
+          - invalid_scope
+          - server_error
+          - temporarily_unavailable
+        error_uri:
+          type: string
+          description: "A URI identifying a human-readable web page with information\
+            \ about the error, used to provide the client developer with additional\
+            \ information about the error."
+x-original-swagger-version: "2.0"
