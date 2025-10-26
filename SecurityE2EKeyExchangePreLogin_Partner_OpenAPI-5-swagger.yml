@@ -1,0 +1,166 @@
+openapi: 3.0.1
+info:
+  title: SecurityE2EKeyExchangePreLogin_Partner_OpenAPI
+  description: This pre-login Proxy is used by browser based applications for retrieving
+    the public key used for encryption.
+  version: 1.0.0
+  x-deployment-reference: ""
+  x-linked-api: GetEncryptionKeyPreLogin
+servers:
+- url: https://127.0.0.1/openapi/partner/v1/prelogin/security/e2eKey
+paths:
+  /:
+    get:
+      tags:
+      - Foundations_Utilities_Encrytion and Decryption
+      summary: Retrieve Public Key  During Pre login for Partner
+      description: "This API is used to retrieve  the public key for encryption of\
+        \ sensitive data  while  Pre Login use cases like Customer On Boarding etc,."
+      parameters:
+      - $ref: '#/components/parameters/Authorization'
+      - $ref: '#/components/parameters/uuid'
+      - $ref: '#/components/parameters/Accept'
+      - $ref: '#/components/parameters/client_id'
+      - $ref: '#/components/parameters/clientDetails'
+      responses:
+        "200":
+          description: Successful operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEncryptionKeyResponse'
+        "400":
+          description: <table><tr><td>Type</td><td>Code</td><td>Details</td></tr><tr><td>invalid</td><td>invalidRequest</td><td>Missing
+            or invalid Parameters</td></tr><tr><td>error</td><td>cannotRetrieveKeyInfo</td><td>cannot
+            retrieve public key.</td></tr><tr><td>error</td><td>e2eDisabled</td><td>E2E
+            is disabled.</td></tr></table>
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: <table><tr><td>error</td><td>unAuthorized</td><td>Authorization
+            credentials are missing or invalid</td></tr></table>
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: <table><tr><td>error</td><td>accessNotConfigured</td><td>The
+            request operation is not configured to access this resource</td></tr></table>
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: <table><tr><td>error</td><td>resourceNotFound</td><td>Empty
+            resource/resource not found</td></tr></table>
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: <table><tr><td>fatal</td><td>serverUnavailable</td><td>The
+            request failed due to an internal error/server unavailability</td></tr></table>
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    GetEncryptionKeyResponse:
+      required:
+      - exponent
+      - modulus
+      type: object
+      properties:
+        modulus:
+          type: string
+          description: Public key modulus to be used for encrypting the pin
+          example: A2FB4E7B03DC966F964C86777D7F791779739248E12C291AB27DE866CADBED78FF820CE1D6EA88039C2A1543A896CA8797DF5DB9AC43EDFB1036307878F7216EB0F21FDC076F0542833A9337C6F388DCFA2568E183F46752AABCF4AC395B8CECAEE0B873AD880EAD77E31BD705D36E37CDBFBD61A45D484F68D0C918A6A557D15CACC99F6332AFA58E0D33B6F4D9B748681EB5DE6A89A57A981BEB1EBF61E06CE85D38AE4665313C7E5C45A8EE6F30E6AC8426E82B2D69AD85A4C5A2329D46B18338D9722196A5B1C4BF6FF88914D34D2E694E09FE95F955C337C1F0BA25DC6AF915C87C316DB9DCA8C28C81EE35286ACDDD02B84B35C9B4D5D1470C6647C087
+        exponent:
+          type: string
+          description: Public key exponent to to be used for encrypting the pin
+          example: "3"
+        keyIdentifier:
+          type: string
+          description: This refer to unique identifier for the public key for security
+            gateway
+          example: CARD_LOGIN
+    ErrorResponse:
+      required:
+      - code
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: Invalid - Request did not confirm to the specification and
+            was unprocessed and rejected. Please fix the value and try again
+          enum:
+          - error
+          - warn
+          - invalid
+          - fatal
+        code:
+          type: string
+          description: Error code which qualifies the error
+        details:
+          type: string
+          description: Human readable explanation specific to the occurrence of the
+            problem
+        location:
+          type: string
+          description: The name of the field that resulted in the error
+        moreInfo:
+          type: object
+          properties: {}
+          description: URI to human readable documentation of the erro
+  parameters:
+    Authorization:
+      name: Authorization
+      in: header
+      description: Access token to authenticate your request.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    uuid:
+      name: uuid
+      in: header
+      description: 128 bit random UUID generated uniquely for every request.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    Accept:
+      name: Accept
+      in: header
+      description: Content-Type that are acceptable for the response.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    client_id:
+      name: client_id
+      in: header
+      description: Client ID generated during application registration.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    clientDetails:
+      name: clientDetails
+      in: header
+      description: "This field is used to capture device,browser and network information.\
+        \ Refer the developer portal for more information.These are the fields which\
+        \ will be passed as part of the header devicePrint,deviceTokenCookie,userIpAddress,userAgent,hardwareId,simId,deviceModel,deviceName,deviceOsName,deviceOsVersion,multitaskingSupportFlag,languageSupport,wifiMacAddress,cellTowerId,locationAreaCode,rsaApplicationKey,wapClientId,mobileCarrierCode,mobileCountryCode,osId,geoLongitude,geoLatitude,geoHorizontalAccuracy,geoAltitude,geoAltitudeAccuracy,geoSpeed,geoTimestamp,geoStatus,basicServiceSetId,signalStrength,wifiChannel,serviceSetId"
+      required: false
+      style: simple
+      explode: false
+      schema:
+        type: string

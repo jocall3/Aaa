@@ -1,0 +1,3135 @@
+import React, { useState, useEffect, createContext, useContext, useReducer, useCallback } from 'react';
+import { ApolloClient, InMemoryCache, ApolloProvider, useQuery, useMutation, gql } from '@apollo/client';
+import WebSocket from 'ws'; // Node.js WebSocket, for browser use 'new WebSocket()'
+import { Configuration, OpenAIApi } from 'openai'; // Assuming Gemini can be integrated via OpenAI API or a similar interface
+import axios from 'axios';
+import produce from 'immer';
+
+// --- Global Constants and Configuration ---
+const API_BASE_URL = 'https://sandbox.apihub.citi.com/gcb//api';
+const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY'; // Replace with actual Gemini API key
+const CLIENT_ID = process.env.REACT_APP_CLIENT_ID || 'YOUR_CLIENT_ID';
+const WEBSOCKET_URL = 'ws://localhost:8080/money-movement-webhooks'; // Example WebSocket URL for webhooks
+
+// Gemini API Integration (Placeholder - adjust based on actual Gemini SDK)
+// For simplicity, using OpenAI SDK as a proxy, assuming similar interaction
+const openaiConfig = new Configuration({
+  apiKey: GEMINI_API_KEY, // This would be the Gemini API key if using a wrapper/SDK that maps to OpenAI
+});
+const geminiApi = new OpenAIApi(openaiConfig);
+
+// --- OpenAPI Specification to TypeScript Interfaces (SDK) ---
+
+export interface RetrievePaymentInitiationTransactionMultipleTransfersStatusResponse {
+  transactionDetails?: TransactionDetails[];
+  nextStartIndex?: string;
+}
+
+export interface TransactionDetails {
+  individualBundleId: string;
+  transactionId?: string;
+  beneficiaryName?: string;
+  beneficiaryBankName?: string;
+  transactionAmount?: number;
+  transactionCurrencyCode?: string;
+  transactionDate?: string;
+  transactionStatus?: string;
+  transactionType?: string;
+}
+
+export interface RetrieveUnmaskedAccountDataRequest {
+  accountInfo?: AccountInfo[];
+}
+
+export interface AccountInfo {
+  accountId: string;
+}
+
+export interface RetrieveUnmaskedAccountDataResponse {
+  accounts?: Accounts[];
+}
+
+export interface Accounts {
+  unmaskedAccountNumber: string;
+  accountId: string;
+}
+
+export interface UpdatePaymentInitiationTransactionRepeatingPaymentsRequest {
+  controlFlowId?: string;
+}
+
+export interface ExecutePaymentInitiationTransactionMultipleTransfersConfirmationAsyncRequest {
+  controlFlowId?: string;
+}
+
+export interface ExecutePaymentInitiationTransactionMultipleTransfersConfirmationAsyncResponse {
+  transactionStatus?: string;
+  tppBundleId?: string;
+  citiBundleId?: string;
+}
+
+export interface RetrievePaymentInitiationTransactionRepeatingPaymentsResponse {
+  nextStartIndex?: string;
+  standingInstructions?: StandingInstructions[];
+}
+
+export interface StandingInstruction {
+  standingInstructionStartDate: string;
+  paymentFrequency: string;
+  perpetualFlag?: boolean;
+  standingInstructionEndDate?: string;
+}
+
+export interface FutureDatedTransaction {
+  scheduleDate: string;
+}
+
+export interface ExecutePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsyncRequest {
+  controlFllowId?: string;
+}
+
+export interface ExecutePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsyncResponse {
+  transactionStatus?: string;
+  bundleId?: string;
+  citiBundleId?: string;
+  totalTransactionCount?: string;
+}
+
+export interface ExecutePaymentInitiationTransactionAdhocMultipleTransferAsyncRequest {
+  internalDomesticDetails?: InternalDomesticDetails;
+  externalDomesticDetails?: ExternalDomesticDetails;
+  crossBorderDetails?: CrossBorderDetails;
+  sepa?: Sepa;
+}
+
+export interface InternalDomesticDetails {
+  sourceAccountId: string;
+  transferCurrencyIndicator: string;
+  transactionAmount: number;
+  payeeAccountDetails?: PayeeAccountDetails;
+  remarks?: Remarks[];
+  paymentScheduleType?: string;
+}
+
+export interface PayeeAccountDetails {
+  payeeAccountNumber: string;
+  payeeName: string;
+  payeeNickName?: string;
+  payeeBankDetails?: PayeeBankDetails;
+  payeeAddress?: PayeeAddress;
+}
+
+export interface Remarks {
+  remarks: string;
+}
+
+export interface ExternalDomesticDetails {
+  sourceAccountId: string;
+  transferCurrencyIndicator: string;
+  chargeBearer: string;
+  paymentMethod: string;
+  transactionAmount: number;
+  paymentType?: string;
+  foreignExchangeReferenceNumber?: string;
+  paymentScheduleType?: string;
+  payeeAccountDetails?: PayeeAccountDetails;
+  remarks?: Remarks[];
+  transferPurpose?: string;
+}
+
+export interface PayeeAddress {
+  addressLine1: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  countryName?: string;
+}
+
+export interface BankDetails {
+  bankCode?: string;
+  bankName?: string;
+}
+
+export interface PayeeBankAddress {
+  addressLine1: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  countryName?: string;
+}
+
+export interface CrossBorderDetails {
+  sourceAccountId: string;
+  transferCurrencyIndicator: string;
+  chargeBearer: string;
+  paymentMethod: string;
+  transactionAmount: number;
+  paymentType?: string;
+  foreignExchangeReferenceNumber?: string;
+  paymentScheduleType?: string;
+  payeeAccountDetails?: PayeeAccountDetails;
+  remarks?: Remarks[];
+}
+
+export interface PayeeBankDetails {
+  globalBankCode: string;
+  countryName?: string;
+}
+
+export interface Sepa {
+  sourceAccountId: string;
+  transactionCurrencyCode: string;
+  transactionAmount: number;
+  payeeAccountDetails?: PayeeAccountDetails;
+  payeeAddress?: PayeeAddress;
+  payeeBankDetails?: PayeeBankDetails;
+  remarks?: Remarks[];
+}
+
+export interface ExecutePaymentInitiationTransactionAdhocMultipleTransferAsyncResponse {
+  transactionStatus?: string;
+  bundleId?: string;
+  citiBundleId?: string;
+  totalTransactionCount?: string;
+}
+
+export interface UpdatePaymentInitiationTransactionRepeatingPaymentsPreprocessRequest {
+  accountId: string;
+  paymentMethod: string;
+  bankSortCode?: string;
+  transactionReferenceId: string;
+  transactionAmount?: number;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+}
+
+export interface UpdatePaymentInitiationTransactionRepeatingPaymentsPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails[];
+  creditDetails?: CreditDetails[];
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface DebitDetails {
+  transactionDebitAmount?: number;
+  currencyCode?: string;
+}
+
+export interface CreditDetails {
+  transactionCreditAmount?: number;
+  currencyCode?: string;
+}
+
+export interface UpdatePaymentInitiationTransactionRepeatingPaymentsConfirmationRequest {
+  controlFlowId: string;
+}
+
+export interface UpdatePaymentInitiationTransactionRepeatingPaymentsConfirmationResponse {
+  accountId: string;
+  transactionReferenceId: string;
+}
+
+export interface StandingInstructions {
+  transactionReferenceId: string;
+  displayAccountNumber: string;
+  accountId: string;
+  paymentMethod: string;
+  bankSortCode?: string;
+  transactionAmount: number;
+  payee: string;
+  paymentType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+}
+
+export interface RetrievePaymentInitiationTransactionBulkSourceAccountAndPayeeEligibilityResponse {
+  sourceAccountAndPayee?: SourceAccountAndPayee[];
+  nextStartIndex?: string;
+}
+
+export interface SourceAccountAndPayee {
+  paymentMethod?: string;
+  sourceAccounts?: SourceAccounts[];
+  payeeSourceAccountCombinations?: PayeeSourceAccountCombinations[];
+}
+
+export interface SourceAccounts {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  accountGroup: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  productName?: string;
+  accountNickName?: string;
+}
+
+export interface PayeeSourceAccountCombinations {
+  payeeId: string;
+  displayPayeeAccountNumber?: string;
+  payeeAccountCurrencyCode: string;
+  payeeNickName: string;
+  bankDetails?: BankDetails;
+  paymentType?: string;
+  paymentMethods: PaymentMethod[];
+  merchantNumber?: string;
+  payeeName?: string;
+  payeeAddress?: PayeeAddress;
+  sourceAccountIds: SourceAccountIds[];
+}
+
+export interface ExecutePaymentInitiationTransactionMultipleTransfersAsyncRequest {
+  bundleId?: string;
+  totalTransferAmount?: number;
+  typeOfTransfers?: string;
+  sourceAccountId?: string;
+  internalDomesticPayments?: InternalDomesticPayments[];
+  externalDomesticPayments?: ExternalDomesticPayments[];
+}
+
+export interface InternalDomesticPayments {
+  transactionAmount?: number;
+  transferCurrencyIndicator: string;
+  payeeId?: string;
+  chargeBearer?: string;
+  fxDealReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  anticipatoryPaymentFlag?: boolean;
+}
+
+export interface ExternalDomesticPayments {
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  payeeId?: string;
+  chargeBearer: string;
+  paymentMethod: string;
+  fxDealReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+  transferSubPurpose?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  anticipatoryPaymentFlag?: boolean;
+  uniquePaymentId?: string;
+}
+
+export interface ExecutePaymentInitiationTransactionMultipleTransfersAsyncResponse {
+  transactionStatus?: string;
+  tppBundleId?: string;
+  citiBundleId?: string;
+}
+
+export interface AdhocInternalDmstcTransferPreprocessWithAddPayeeRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetails;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  chargeBearer?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  transferPurpose?: string;
+  transferSubPurpose?: string;
+  remarks?: string;
+  paymentPriority?: string;
+}
+
+export interface AdhocInternalDmstcTransferPreprocessWithAddPayeeResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  forexType?: string;
+  forexConversionIndicator?: string;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+  localCurrencyTransactionFee?: number;
+  localCurrencyCode?: string;
+}
+
+export interface InternalDomesticTransferConfirmationRequest {
+  controlFlowId: string;
+}
+
+export interface InternalDomesticTransferConfirmationResponse {
+  sourceAccount?: SourceAccount;
+  payeeEnrollmentStatus?: string;
+  transactionReferenceId: string;
+}
+
+export interface SourceAccount {
+  displaySourceAccountNumber: string;
+  sourceAccountAvailableBalance: number;
+  sourceCurrencyCode: string;
+}
+
+export interface AdhocExtDmstcTransferPreprocessWithAddPayeeRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetails;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  chargeBearer?: string;
+  paymentMethod?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+  transferPurpose?: string;
+}
+
+export interface Address {
+  addressLine1?: string;
+  addressLine2?: string;
+  addressLine3?: string;
+}
+
+export interface AdhocExtDmstcTransferPreprocessWithAddPayeeResponse {
+  controlFlowId: string;
+  debitDetails: DebitDetails;
+  creditDetails: CreditDetails;
+  foreignExchangeRate?: number;
+  forexType?: string;
+  forexConversionIndicator?: string;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+  localCurrencyTransactionFee?: number;
+  localCurrencyCode?: string;
+  paymentPriority?: string;
+}
+
+export interface ExternalDomesticTransferConfirmationRequest {
+  controlFlowId: string;
+}
+
+export interface ExternalDomesticTransferConfirmationResponse {
+  sourceAccount?: SourceAccount;
+  payeeEnrollmentStatus?: string;
+  transactionReferenceId: string;
+}
+
+export interface CitiGlobalTransferpayee {
+  payeeName: string;
+  payeeNickName: string;
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeCountryCode: string;
+  accountId: string;
+  displayAccountNumber: string;
+  payeeAddress?: PayeeAddress;
+  payeeNotes: string;
+}
+
+export interface CrossBorderWireTransferPayee {
+  payeeName: string;
+  payeeNickName: string;
+  payeeType: string;
+  payeeStatus?: string;
+  transferPurpose?: string;
+  currencyCode?: string;
+  localCurrencyCode?: string;
+  payeeCountryCode: string;
+  accountId: string;
+  displayAccountNumber: string;
+  beneficiaryBankName: string;
+  beneficiaryBankCode: string;
+  bankRoutingMethod?: string;
+  payeeAddress?: PayeeAddress;
+  bankAddress?: BankAddress;
+  crossBorderBeneficiaryDetails?: CrossBorderBeneficiaryDetails;
+  payeeNotes: string;
+}
+
+export interface SepaTransferPayee {
+  payeeName: string;
+  payeeNickName: string;
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeCountryCode: string;
+  accountId: string;
+  displayAccountNumber: string;
+  beneficiaryBankName?: string;
+  beneficiaryBankCode?: string;
+  payeeNotes: string;
+}
+
+export interface BankAddress {
+  addressLine1?: string;
+  addressLine2?: string;
+  addressLine3?: string;
+}
+
+export interface CrossBorderBeneficiaryDetails {
+  beneficiaryType?: string;
+  transactionCategory?: string;
+  beneficiaryTaxId?: string;
+  legalTaxId?: string;
+  beneficiaryNationalIdNumber?: string;
+  beneficiaryNationalIdType?: string;
+  beneficiaryNationality?: string;
+  beneficiaryDateOfBirth?: string;
+}
+
+export interface PayeeDetailsResponse {
+  internalDomesticPayee?: InternalDomesticPayee;
+  externalDomesticPayee?: ExternalDomesticPayee;
+  billPaymentPayee?: BillPaymentPayee;
+  ibbsPayee?: IbbsPayee;
+  citiGlobalTransferpayee?: CitiGlobalTransferpayee;
+  crossBorderWireTransfersPayee?: CrossBorderWireTransferPayee;
+  sepaTransferPayee?: SepaTransferPayee;
+}
+
+export interface InternalDomesticPayee {
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeName: string;
+  payeeNickName: string;
+  paymentPriority?: string;
+  payeeNotes: string;
+  displayAccountNumber?: string;
+  accountId?: string;
+  displayCardNumber?: string;
+  cardId?: string;
+}
+
+export interface ExternalDomesticPayee {
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeName: string;
+  payeeNickName: string;
+  paymentPriority?: string;
+  payeeNotes: string;
+  displayAccountNumber: string;
+  accountId: string;
+  beneficiaryBankName?: string;
+  beneficiaryBankCode?: string;
+  utilityBillPaymentIndicator?: string;
+  beneficiaryIndividualTaxNumber?: string;
+  beneficiaryTaxRegistrationCode?: string;
+  taxDeclarationype?: string;
+  taxYear?: string;
+  taxPeriod?: string;
+  idType?: string;
+  idNumber?: string;
+}
+
+export interface BillPaymentPayee {
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeNickName: string;
+  paymentPriority?: string;
+  payeeNotes: string;
+  merchantName?: string;
+  merchantNameLocal?: string;
+  merchantNumber?: string;
+  merchantInformation?: MerchantInformation[];
+}
+
+export interface IbbsPayee {
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeName: string;
+  payeeNickName: string;
+  payeeNotes: string;
+  paymentPriority?: string;
+  displayAccountNumber: string;
+  accountId: string;
+  beneficiaryBankName?: string;
+  beneficiaryBankCode?: string;
+  utilityBillPaymentIndicator?: string;
+  beneficiaryIndividualTaxNumber?: string;
+  beneficiaryTaxRegistrationCode?: string;
+}
+
+export interface PreprocessFundTransferRequest {
+  sourceAccountId: string;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  destinationAccountId: string;
+  chargeBearer: string;
+  fxDealReferenceNumber?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+}
+
+export interface PreprocessForFundTransferResponse {
+  controlFlowId: string;
+  debitDetails: DebitDetails;
+  creditDetails: CreditDetails;
+  foreignExchangeRate: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface TaxPaymentDetails {
+  idType: string;
+  idNumber: string;
+  taxDeclarationType: string;
+  taxPaymentYear: string;
+  taxPaymentMonth?: string;
+  taxPaymentDay?: string;
+  taxPaymentPeriod?: string;
+  taxPaymentPeriodNumber?: string;
+}
+
+export interface InternalDomesticValidSourceDestinationAcccountsResponse {
+  sourceAccounts: InternalDomesticSourceAccounts[];
+  payeeSourceAccountCombinations: InternalDomesticPayeeSourceAccountCombinations[];
+  nextStartIndex?: string;
+}
+
+export interface PersonalDomesticValidSrcDesAcctRes {
+  sourceAccounts: PersonalDomesticSourceAccounts[];
+  destinationSourceAcctCombinations: PersonalDomesticDestinationSourceAcctCombinations[];
+}
+
+export interface InternalDomesticSourceAccounts {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  accountGroup: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  accountNickName?: string;
+  productName?: string;
+}
+
+export interface ExternalDomesticTransferRequest {
+  controlFlowId: string;
+}
+
+export interface BillPaymentSourceAccounts {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  accountGroup: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  accountNickName?: string;
+  productName?: string;
+}
+
+export interface ExternalDomesticPayeeSourceAccountCombinations {
+  payeeId: string;
+  displayPayeeAccountNumber: string;
+  payeeAccountCurrencyCode: string;
+  payeeNickName: string;
+  bankDetails: BankDetails;
+  paymentMethods: PaymentMethod[];
+  sourceAccountIds: SourceAccountIds[];
+}
+
+export interface InternalDomesticPayeeSourceAccountCombinations {
+  payeeId: string;
+  displayPayeeAccountNumber: string;
+  payeeAccountCurrencyCode: string;
+  payeeNickName: string;
+  sourceAccountIds: SourceAccountIds[];
+}
+
+export interface ExternalDomesticTransferResponse {
+  sourceAccount: SourceAccount;
+  transactionReferenceId: string;
+}
+
+export interface PersonalDomesticTransferResponse {
+  sourceAccount: SourceAccount;
+  destinationAccount: DestinationAccount;
+  transactionReferenceId: string;
+}
+
+export interface PreprocessFundTransferRequestPersonalTransfer {
+  sourceAccountId: string;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  destinationAccountId: string;
+  fxDealReferenceNumber?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+}
+
+export interface PreprocessFundTransferRequestInternalTransfer {
+  sourceAccountId: string;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  payeeId: string;
+  fxDealReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+}
+
+export interface PreprocessFundTransferRequestExternalTransfer {
+  sourceAccountId: string;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  payeeId: string;
+  chargeBearer: string;
+  paymentMethod: string;
+  fxDealReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  taxPaymentDetails?: TaxPaymentDetails;
+}
+
+export interface PayeeListResponse {
+  payeeList: Payee[];
+  nextStartIndex?: string;
+}
+
+export interface DestinationAccount {
+  displayDestinationAccountNumber: string;
+  destinationAccountAvailableBalance: number;
+  destinationCurrencyCode: string;
+}
+
+export interface PersonalDomesticTransferRequest {
+  controlFlowId: string;
+}
+
+export interface InternalDomesticTransferRequest {
+  controlFlowId: string;
+}
+
+export interface ValidSourceDestinationAccountsResponse {
+  sourceAccounts?: SourceAccounts[];
+  payeeSourceAccountCombinations?: PayeeSourceAccountCombinations[];
+  destinationSourceAcctCombinations?: DestinationSourceAcctCombinations[];
+  nextStartIndex?: string;
+}
+
+export interface PersonalDomesticSourceAccounts {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  accountGroup: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  productName?: string;
+  accountNickName?: string;
+}
+
+export interface BillPaymentPayeeSourceAccountCombinations {
+  payeeId: string;
+  displayPayeeAccountNumber?: string;
+  payeeAccountCurrencyCode: string;
+  payeeName?: string;
+  payeeNickName: string;
+  merchantNumber?: string;
+  billTypeCode?: string;
+  sourceAccountIds: SourceAccountIds[];
+}
+
+export interface PersonalDomesticDestinationSourceAcctCombinations {
+  destinationAccountId: string;
+  displayDestinationAccountNumber: string;
+  destinationAccountCurrencyCode: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  outstandingBalance?: number;
+  minimumDueAmount?: number;
+  lastStatementDate?: string;
+  paymentDueDate?: string;
+  sourceAccountIds: SourceAccountIds[];
+  productName?: string;
+  accountNickName?: string;
+}
+
+export interface ExternalDomesticSourceAccounts {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  accountGroup: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  accountNickName?: string;
+  productName?: string;
+}
+
+export interface ExtDmstcValidPayeeDestAcctsResponse {
+  sourceAccounts: ExternalDomesticSourceAccounts[];
+  payeeSourceAccountCombinations: ExternalDomesticPayeeSourceAccountCombinations[];
+  nextStartIndex?: string;
+}
+
+export interface DestinationSourceAcctCombinations {
+  destinationAccountId: string;
+  displayDestinationAccountNumber: string;
+  destinationAccountCurrencyCode: string;
+  productName?: string;
+  availableBalance?: number;
+  nextPaymentAmount?: number;
+  outstandingBalance?: number;
+  minimumDueAmount?: number;
+  lastStatementDate?: string;
+  paymentDueDate?: string;
+  sourceAccountIds: SourceAccountIds[];
+  accountNickName?: string;
+}
+
+export interface PaymentMethod {
+  paymentMethod?: string;
+}
+
+export interface Payee {
+  payeeId: string;
+  payeeName?: string;
+  payeeNickname?: string;
+  paymentType: string;
+  displayAccountNumber?: string;
+  accountId: string;
+  currencyCode?: string;
+  paymentMethods?: PaymentMethod[];
+  payeeStatus: string;
+  merchantNumber?: string;
+  billTypeCode?: string;
+}
+
+export interface AdhocExternalDmstcSrcAcctEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  nextStartIndex?: string;
+}
+
+export interface AdhocExtDmstcTransferPreprocessRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetailsAdhocExtTransferPreprocess;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  chargeBearer: string;
+  paymentMethod: string;
+  paymentType?: string;
+  fxDealReferenceNumber?: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  taxPaymentDetails?: TaxPaymentDetails;
+  remarks?: string;
+  transferPurpose?: string;
+}
+
+export interface PayeeAccountDetailsAdhocExtTransferPreprocess {
+  payeeAccountNumber?: string;
+  payeeName?: string;
+  payeeNickName?: string;
+  payeeCurrencyCode?: string;
+  payeeAddress?: PayeeAddress;
+  bankDetails?: BankDetailsExtTransfer;
+}
+
+export interface BankDetailsExtTransfer {
+  bankCode: string;
+  payeeBankAddress?: PayeeBankAddress;
+}
+
+export interface AdhocExtDmstcTransferPreprocessResponse {
+  controlFlowId: string;
+  debitDetails: DebitDetails;
+  creditDetails: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface AdhocInternalDmstcTransferPreprocessRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetailsAdhocIntTransferPreprocess;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: string;
+}
+
+export interface PayeeAccountDetailsAdhocIntTransferPreprocess {
+  payeeAccountNumber?: string;
+  payeeName?: string;
+  payeeNickName?: string;
+}
+
+export interface AdhocInternalDmstcTransferPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+}
+
+export interface BankDetailsSEPATransfer {
+  globalBankCode: string;
+  bankName?: string;
+}
+
+export interface SourceAccountDetails {
+  sourceAccountId?: string;
+  displaySourceAccountNumber: string;
+  sourceAccountCurrencyCode: string;
+  sourceAccountAvailableBalance: number;
+}
+
+export interface CrossBorderWireTransfersPayee {
+  payeeName: string;
+  payeeNickName: string;
+  payeeType: string;
+  payeeStatus?: string;
+  currencyCode?: string;
+  payeeCountryCode: string;
+  accountId: string;
+  displayAccountNumber: string;
+  beneficiaryBankName: string;
+  beneficiaryBankCode: string;
+  payeeAddress?: PayeeAddress;
+  bankAddress?: BankAddress;
+  payeeNotes: string;
+}
+
+export interface CrossBorderWireTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeId: string;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  chargeBearer: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: Remarks[];
+}
+
+export interface CrossBorderWireTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface CrossBorderWireTransfersAccountPayeeEligibilityResponse {
+  sourceAccounts: SourceAccountsCrossBorderWireTransfer[];
+  payeeSourceAccountCombinations?: PayeeSourceAccountCombinationsCrossBorderWireTransfer[];
+  nextStartIndex?: string;
+}
+
+export interface SourceAccountsCrossBorderWireTransfer {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  productName?: string;
+  sourceAccountCurrencyCode: string;
+  accountNickname?: string;
+  accountGroup: string;
+  availableBalance?: number;
+}
+
+export interface PayeeSourceAccountCombinationsCrossBorderWireTransfer {
+  payeeId: string;
+  displayPayeeAccountNumber: string;
+  payeeAccountCurrencyCode?: string;
+  payeeName?: string;
+  payeeNickName?: string;
+  payeeBankDetails?: PayeeBankDetailsCrossBorderWireTransfer;
+  payeeAddress?: PayeeAddress;
+  sourceAccountIds?: SourceAccountIds[];
+}
+
+export interface PayeeBankDetailsCrossBorderWireTransfer {
+  globalBankCode: string;
+  bankName?: string;
+  payeeBankAddress?: PayeeBankAddress;
+}
+
+export interface CrossBorderWireTransfersRequest {
+  controlFlowId: string;
+}
+
+export interface CrossBorderWireTransfersResponse {
+  transactionReferenceId: string;
+  sourceAccountDetails: SourceAccountDetails;
+}
+
+export interface AdhocCrossBorderWireTransfersSrcAcctEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  nextStartIndex?: string;
+}
+
+export interface AdhocCrossBorderWireTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetailsAdhocCrossBorderWireTransferPreprocess;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  chargeBearer: string;
+  paymentScheduleType?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+  remarks?: Remarks[];
+}
+
+export interface PayeeAccountDetailsAdhocCrossBorderWireTransferPreprocess {
+  payeeAccountNumber?: string;
+  accountIbanFlag?: boolean;
+  payeeName?: string;
+  payeeNickName?: string;
+  payeeCurrencyCode?: string;
+  payeeAddress?: PayeeAddress;
+  payeeBankDetails?: PayeeBankDetailsAdhocCrossBorderWireTransferPreprocess;
+}
+
+export interface PayeeBankDetailsAdhocCrossBorderWireTransferPreprocess {
+  payeeBankName?: string;
+  globalBankCode: string;
+  payeeBankAddress?: PayeeBankAddress;
+}
+
+export interface AdhocCrossBorderWireTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface AccountProxyTransfersConfirmationRequest {
+  controlFlowId: string;
+}
+
+export interface AccountProxyTransfersConfirmationResponse {
+  sourceAccount?: SourceAccount;
+  transactionReferenceId: string;
+  payeeEnrollmentStatus?: string;
+}
+
+export interface AccountProxyTransfersPreprocessRequest {
+  proxyPaymentType: string;
+  sourceAccountId: string;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  transferCurrencyIndicator: string;
+  proxyAccountId: string;
+  proxyAccountIdType: string;
+  chargeBearer: string;
+  billReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+}
+
+export interface AccountProxyTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  forexType?: string;
+  forexConversionIndicator?: string;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+  localCurrencyTransactionFee?: number;
+  localCurrencyCode?: string;
+}
+
+export interface AccountProxyTransfersRequest {
+  controlFlowId: string;
+}
+
+export interface AccountProxyTransfersResponse {
+  sourceAccount?: SourceAccount;
+  transactionReferenceId: string;
+  payeeEnrollmentStatus?: string;
+}
+
+export interface AdhocAccountProxyTransfersPreprocessWithAddPayeeRequest {
+  proxyPaymentType: string;
+  sourceAccountId: string;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  transferCurrencyIndicator: string;
+  proxyAccountId: string;
+  proxyAccountIdType: string;
+  chargeBearer: string;
+  billReferenceNumber?: string;
+  remarks?: string;
+  transferPurpose?: string;
+  payeeNickName?: string;
+  payeeEnrollmentFlag?: boolean;
+  bankName?: string;
+  customerName?: string;
+}
+
+export interface AdhocAccountProxyTransfersPreprocessWithAddPayeeResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  forexType?: string;
+  forexConversionIndicator?: string;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+  localCurrencyTransactionFee?: number;
+  localCurrencyCode?: string;
+  transactionLimitRange?: string;
+}
+
+export interface AccountProxyTransfersSourceAccountEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  nextStartIndex?: string;
+}
+
+export interface BillDetailsInquiryResponse {
+  invoiceNumber?: string;
+  billDetails: BillDetails[];
+  customerMerchantReferenceDetails: CustomerMerchantReferenceDetails[];
+}
+
+export interface BillDetails {
+  billSequenceNumber?: string;
+  billAmount: number;
+  billDueDate: string;
+}
+
+export interface CustomerMerchantReferenceDetails {
+  customerMerchantReferenceCode: string;
+  customerMerchantReferenceDescription: string;
+}
+
+export interface DestinationListResponse {
+  paymentCountry: PaymentCountry[];
+  nextStartIndex?: string;
+}
+
+export interface PaymentCountry {
+  countryName: string;
+  countryCode: string;
+  localCurrencyCode?: string;
+  countryBankBranchIdentifier?: string;
+  countryIbanFlag?: boolean;
+}
+
+export interface PersonalDomesticTransferConfirmationRequest {
+  controlFlowId: string;
+}
+
+export interface PersonalDomesticTransferConfirmationResponse {
+  sourceAccount?: SourceAccount;
+  destinationAccount?: DestinationAccount;
+  transactionReferenceId: string;
+}
+
+export interface MerchantListResponse {
+  merchantInformation?: MerchantInformationML[];
+}
+
+export interface MerchantInformationML {
+  billerCategoryCode: string;
+  merchants: Merchant[];
+}
+
+export interface Merchant {
+  merchantName: string;
+  merchantNameLocal?: string;
+  merchantNumber: string;
+}
+
+export interface MerchantDetailsResponse {
+  merchantDetails?: MerchantDetails[];
+}
+
+export interface MerchantDetails {
+  merchantCustomerRelationshipType: string;
+  merchantCustomerRelationshipTypeCode?: string;
+  merchantCustomerRelationshipTypeLocal?: string;
+}
+
+export interface BillPaymentsPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+  payeeName?: string;
+  merchantNumber?: string;
+}
+
+export interface BillPaymentsResponse {
+  sourceAccount?: SourceAccount;
+  transactionReferenceId: string;
+}
+
+export interface SourceAccountIds {
+  sourceAccountId: string;
+}
+
+export interface BillPaymentsRequest {
+  controlFlowId: string;
+}
+
+export interface BillPaymentsPreprocessRequest {
+  sourceAccountId: string;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  payeeId: string;
+  billTypeCode?: string;
+  remarks?: string;
+  customerReferenceNumber?: string;
+  paymentScheduleType?: string;
+  paymentMethod?: string;
+  futureDatedTransaction?: FutureDatedTransaction;
+  standingInstruction?: StandingInstruction;
+}
+
+export interface BillPaymentAccountPayeeEligibilityResponse {
+  sourceAccounts: BillPaymentSourceAccounts[];
+  payeeSourceAccountCombinations: BillPaymentPayeeSourceAccountCombinations[];
+  nextStartIndex?: string;
+}
+
+export interface SepaTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeId: string;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  remarks?: Remarks[];
+}
+
+export interface SepaTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface SepaTransfersAccountPayeeEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  payeeSourceAccountCombinations?: PayeeSourceAccountCombinationsSEPATransfer[];
+  nextStartIndex?: string;
+}
+
+export interface PayeeSourceAccountCombinationsSEPATransfer {
+  payeeId: string;
+  displayPayeeAccountNumber?: string;
+  payeeAccountCurrencyCode?: string;
+  payeeNickName?: string;
+  bankDetails?: BankDetailsSEPATransfer;
+  payeeAddress?: PayeeAddress;
+  transferPurpose?: string;
+  sourceAccountIds?: SourceAccountIds[];
+}
+
+export interface SepaTransferRequest {
+  controlFlowId: string;
+}
+
+export interface SepaTransferResponse {
+  transactionReferenceId: string;
+  sourceAccountDetails: SourceAccountDetails;
+}
+
+export interface MerchantInformation {
+  merchantCustomerRelationshipType: string;
+  merchantCustomerRelationshipTypeLocal?: string;
+  billReferenceNumber: string;
+}
+
+export interface CitiGlobalTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeId: string;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  transferPurpose?: string;
+}
+
+export interface CitiGlobalTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface CitiGlobalTransfersAccountPayeeEligibilityResponse {
+  sourceAccounts: SourceAccountsCitiGlobalTransfer[];
+  payeeSourceAccountCombinations?: PayeeSourceAccountCombinationsCitiGlobalTransfer[];
+  nextStartIndex?: string;
+}
+
+export interface SourceAccountsCitiGlobalTransfer {
+  sourceAccountId: string;
+  displaySourceAccountNumber: string;
+  productName?: string;
+  sourceAccountCurrencyCode: string;
+  accountNickname?: string;
+  accountGroup: string;
+  availableBalance?: number;
+}
+
+export interface PayeeSourceAccountCombinationsCitiGlobalTransfer {
+  payeeId: string;
+  displayPayeeAccountNumber: string;
+  payeeAccountCurrencyCode?: string;
+  payeeName?: string;
+  payeeNickName?: string;
+  payeeBankDetails?: PayeeBankDetailsCitiGlobalTransfer;
+  sourceAccountIds?: SourceAccountIds;
+}
+
+export interface PayeeBankDetailsCitiGlobalTransfer {
+  bankName?: string;
+  countryName?: string;
+}
+
+export interface CitiGlobalTransfersRequest {
+  controlFlowId: string;
+}
+
+export interface CitiGlobalTransfersResponse {
+  transactionReferenceId: string;
+  sourceAccountDetails: SourceAccountDetails;
+}
+
+export interface AdhocSepaTransfersSrcAcctEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  nextStartIndex?: string;
+}
+
+export interface AdhocCitiGlobalTransfersSrcAcctEligibilityResponse {
+  sourceAccounts: SourceAccounts[];
+  nextStartIndex?: string;
+}
+
+export interface AdhocCitiGlobalTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetailsAdhocCitiGlobalTransferPreprocess;
+  transactionAmount: number;
+  transferCurrencyIndicator: string;
+  transferPurpose?: string;
+  remarks?: string;
+}
+
+export interface PayeeAccountDetailsAdhocCitiGlobalTransferPreprocess {
+  payeeAccountNumber?: string;
+  payeeName?: string;
+  payeeNickName?: string;
+  payeeCountryName?: string;
+}
+
+export interface AdhocCitiGlobalTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface AdhocSepaTransfersPreprocessRequest {
+  sourceAccountId: string;
+  payeeAccountDetails?: PayeeAccountDetails;
+  transactionAmount: number;
+  transactionCurrencyCode: string;
+  remarks?: Remarks[];
+}
+
+export interface AdhocSepaTransfersPreprocessResponse {
+  controlFlowId: string;
+  debitDetails?: DebitDetails;
+  creditDetails?: CreditDetails;
+  foreignExchangeRate?: number;
+  transactionFee?: number;
+  feeCurrencyCode?: string;
+}
+
+export interface ErrorResponse {
+  type: 'error' | 'warn' | 'invalid' | 'fatal';
+  code: string;
+  details?: string;
+  location?: string;
+  moreInfo?: object;
+}
+
+
+// --- API Client (SDK) ---
+export class MoneyMovementAPI {
+  private baseURL: string;
+  private client_id: string;
+
+  constructor(baseURL: string, client_id: string) {
+    this.baseURL = baseURL;
+    this.client_id = client_id;
+  }
+
+  private async request<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    accessToken: string,
+    uuid: string,
+    body?: any,
+    queryParams?: Record<string, any>
+  ): Promise<T> {
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+
+    const url = new URL(`${this.baseURL}${path}`);
+    if (queryParams) {
+      Object.keys(queryParams).forEach(key => url.searchParams.append(key, queryParams[key]));
+    }
+
+    try {
+      const response = await axios({
+        method,
+        url: url.toString(),
+        headers,
+        data: body,
+      });
+      return response.data;
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error(`API Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+        throw new Error(JSON.stringify(error.response.data));
+      }
+      console.error(`Network or unexpected error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // Gemini Integration Helper (Conceptual: to analyze/generate payment details)
+  private async callGemini(prompt: string, context: any): Promise<string> {
+    try {
+      // In a real scenario, this would be a more sophisticated prompt engineering.
+      // For now, it's a simple text completion with context.
+      const fullPrompt = `Analyze the following banking context and provide a concise summary or relevant data points: ${JSON.stringify(context)}. User request: ${prompt}`;
+      const response = await geminiApi.createCompletion({
+        model: 'text-davinci-003', // Replace with an actual Gemini model if available via OpenAI API, or use a native Gemini SDK
+        prompt: fullPrompt,
+        max_tokens: 150,
+      });
+      return response.data.choices[0].text || 'No Gemini response.';
+    } catch (error: any) {
+      console.error("Gemini API error:", error.response ? error.response.data : error.message);
+      return `Gemini analysis failed: ${error.message}`;
+    }
+  }
+
+  // --- SDK Methods for Endpoints ---
+
+  // Retrieve the status of all transactions executed in one bundle
+  public async retrievePaymentInitiationTransactionMultipleTransfersStatus(
+    accessToken: string,
+    uuid: string,
+    citiBundleId: string,
+    startIndex?: string,
+    clientDetails?: string
+  ): Promise<RetrievePaymentInitiationTransactionMultipleTransfersStatusResponse> {
+    const path = `/v1/paymentInitiation/multipleTransfers/${citiBundleId}/status`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { startIndex };
+    const response = await this.request<RetrievePaymentInitiationTransactionMultipleTransfersStatusResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    // Integrate Gemini: Analyze transaction status
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the status of these multiple transfers.",
+      { citiBundleId, status: response.transactionDetails?.map(t => t.transactionStatus) }
+    );
+    console.log(`Gemini analysis for multiple transfers status (${citiBundleId}): ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve unmasked account number for the requested account Id
+  public async retrieveUnmaskedAccountData(
+    accessToken: string,
+    uuid: string,
+    body: RetrieveUnmaskedAccountDataRequest,
+    clientDetails?: string
+  ): Promise<RetrieveUnmaskedAccountDataResponse> {
+    const path = '/v1/accounts/clearData/retrieve';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<RetrieveUnmaskedAccountDataResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Extract unmasked account numbers.",
+      { request: body, response: response.accounts?.map(a => ({ id: a.accountId, unmasked: a.unmaskedAccountNumber })) }
+    );
+    console.log(`Gemini analysis for unmasked account data: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Execute Multiple Transfers Confirmation for Adhoc Payees
+  public async executePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsync(
+    accessToken: string,
+    uuid: string,
+    body: ExecutePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsyncRequest,
+    clientDetails?: string
+  ): Promise<ExecutePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsyncResponse> {
+    const path = '/v1/paymentInitiation/adhoc/multipleTransfers/confirmation/async';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<ExecutePaymentInitiationTransactionAdhocMultipleTransferConfirmationAsyncResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm adhoc multiple transfers and interpret status.",
+      { controlFlowId: body.controlFllowId, status: response.transactionStatus }
+    );
+    console.log(`Gemini analysis for adhoc multiple transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Execute Multiple Transfers for Adhoc Payees
+  public async executePaymentInitiationTransactionAdhocMultipleTransferAsync(
+    accessToken: string,
+    uuid: string,
+    body: ExecutePaymentInitiationTransactionAdhocMultipleTransferAsyncRequest,
+    nextStartIndex?: string,
+    clientDetails?: string
+  ): Promise<ExecutePaymentInitiationTransactionAdhocMultipleTransferAsyncResponse> {
+    const path = '/v1/paymentInitiation/adhoc/multipleTransfers/async';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<ExecutePaymentInitiationTransactionAdhocMultipleTransferAsyncResponse>(
+      'POST', path, accessToken, uuid, body, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the outcome of executing adhoc multiple transfers.",
+      { request: body, status: response.transactionStatus }
+    );
+    console.log(`Gemini analysis for adhoc multiple transfers execution: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Pre Process for Standing Instruction Update
+  public async updatePaymentInitiationTransactionRepeatingPaymentsPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: UpdatePaymentInitiationTransactionRepeatingPaymentsPreprocessRequest,
+    clientDetails?: string
+  ): Promise<UpdatePaymentInitiationTransactionRepeatingPaymentsPreprocessResponse> {
+    const path = '/v1/paymentInitiation/repeatingPayments/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<UpdatePaymentInitiationTransactionRepeatingPaymentsPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze the standing instruction preprocess details for update.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for repeating payments preprocess update: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Update Standing Instruction Confirmation
+  public async updatePaymentInitiationTransactionRepeatingPaymentsConfirmation(
+    accessToken: string,
+    uuid: string,
+    body: UpdatePaymentInitiationTransactionRepeatingPaymentsConfirmationRequest,
+    clientDetails?: string
+  ): Promise<UpdatePaymentInitiationTransactionRepeatingPaymentsConfirmationResponse> {
+    const path = '/v1/paymentInitiation/repeatingPayments/confirmation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<UpdatePaymentInitiationTransactionRepeatingPaymentsConfirmationResponse>(
+      'PUT', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm the update of standing instructions.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for repeating payments confirmation update: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Delete the Standing Instruction for a Specific Transfer Type
+  public async terminatePaymentInitiationTransactionRepeatingPayments(
+    accessToken: string,
+    uuid: string,
+    accountId: string,
+    transactionReferenceId: string,
+    clientDetails?: string
+  ): Promise<any> { // No specific response schema, just 200 OK
+    const path = `/v1/paymentInitiation/${accountId}/repeatingPayments/${transactionReferenceId}`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<any>(
+      'DELETE', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm the deletion of standing instructions.",
+      { accountId, transactionReferenceId }
+    );
+    console.log(`Gemini analysis for repeating payments termination: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Standing Instruction Inquiry for Specific Payment Type
+  public async retrievePaymentInitiationTransactionRepeatingPayments(
+    accessToken: string,
+    uuid: string,
+    paymentType?: string,
+    nextStartIndex?: string,
+    clientDetails?: string
+  ): Promise<RetrievePaymentInitiationTransactionRepeatingPaymentsResponse> {
+    const path = '/v1/paymentInitiation/repeatingPayments';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { paymentType, nextStartIndex };
+    const response = await this.request<RetrievePaymentInitiationTransactionRepeatingPaymentsResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the standing instructions inquiry results.",
+      { paymentType, instructionsCount: response.standingInstructions?.length }
+    );
+    console.log(`Gemini analysis for repeating payments inquiry: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Update Standing Instruction for Specific Transfer Type
+  public async updatePaymentInitiationTransactionRepeatingPayments(
+    accessToken: string,
+    uuid: string,
+    body: UpdatePaymentInitiationTransactionRepeatingPaymentsRequest,
+    clientDetails?: string
+  ): Promise<any> { // No specific response schema, just 200 OK
+    const path = '/v1/paymentInitiation/repeatingPayments';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<any>(
+      'PUT', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm the update of standing instructions for a transfer type.",
+      { request: body }
+    );
+    console.log(`Gemini analysis for repeating payments update: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Bulk Source Account Payee Eligibility Inquiry
+  public async retrievePaymentInitiationTransactionBulkSourceAccountAndPayeeEligibility(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string,
+    clientDetails?: string
+  ): Promise<RetrievePaymentInitiationTransactionBulkSourceAccountAndPayeeEligibilityResponse> {
+    const path = '/v1/paymentInitiation/bulk/sourceAccountAndPayees/eligibility';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<RetrievePaymentInitiationTransactionBulkSourceAccountAndPayeeEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze bulk source account and payee eligibility.",
+      { eligibilityData: response.sourceAccountAndPayee }
+    );
+    console.log(`Gemini analysis for bulk eligibility: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Execute Multiple Transfers Confirmation
+  public async executePaymentInitiationTransactionMultipleTransfersConfirmationAsync(
+    accessToken: string,
+    uuid: string,
+    body: ExecutePaymentInitiationTransactionMultipleTransfersConfirmationAsyncRequest,
+    clientDetails?: string
+  ): Promise<ExecutePaymentInitiationTransactionMultipleTransfersConfirmationAsyncResponse> {
+    const path = '/v1/paymentInitiation/multipleTransfers/confirmation/async';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<ExecutePaymentInitiationTransactionMultipleTransfersConfirmationAsyncResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm multiple transfers and interpret status.",
+      { controlFlowId: body.controlFlowId, status: response.transactionStatus }
+    );
+    console.log(`Gemini analysis for multiple transfers confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Execute Multiple Transfers
+  public async executePaymentInitiationTransactionMultipleTransfersAsync(
+    accessToken: string,
+    uuid: string,
+    body: ExecutePaymentInitiationTransactionMultipleTransfersAsyncRequest,
+    clientDetails?: string
+  ): Promise<ExecutePaymentInitiationTransactionMultipleTransfersAsyncResponse> {
+    const path = '/v1/paymentInitiation/multipleTransfers/async';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<ExecutePaymentInitiationTransactionMultipleTransfersAsyncResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the outcome of executing multiple transfers.",
+      { request: body, status: response.transactionStatus }
+    );
+    console.log(`Gemini analysis for multiple transfers execution: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Payee Additional Details by Payee Id
+  public async retrievePayeeAdditionalDetailsById(
+    accessToken: string,
+    uuid: string,
+    payeeId: string,
+    clientDetails?: string
+  ): Promise<PayeeDetailsResponse> {
+    const path = `/v1/moneyMovement/payees/${payeeId}/details`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<PayeeDetailsResponse>(
+      'GET', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Extract additional payee details.",
+      { payeeId, details: response }
+    );
+    console.log(`Gemini analysis for payee additional details: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account
+  public async retrieveDestinationSourceAccount(
+    accessToken: string,
+    uuid: string,
+    paymentType?: string,
+    nextStartIndex?: string
+  ): Promise<ValidSourceDestinationAccountsResponse> {
+    const path = '/v1/moneyMovement/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { paymentType, nextStartIndex };
+    const response = await this.request<ValidSourceDestinationAccountsResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze destination and source account combinations.",
+      { paymentType, response }
+    );
+    console.log(`Gemini analysis for destination source accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Payee List
+  public async retrievePayeeList(
+    accessToken: string,
+    uuid: string,
+    paymentType?: string,
+    nextStartIndex?: string
+  ): Promise<PayeeListResponse> {
+    const path = '/v1/moneyMovement/payees';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { paymentType, nextStartIndex };
+    const response = await this.request<PayeeListResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the retrieved payee list.",
+      { paymentType, payeesCount: response.payeeList?.length }
+    );
+    console.log(`Gemini analysis for payee list: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Payee Details by Payee Id
+  public async retrievePayeeDetailsById(
+    accessToken: string,
+    uuid: string,
+    payeeId: string
+  ): Promise<PayeeDetailsResponse> {
+    const path = `/v1/moneyMovement/payees/${payeeId}`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const response = await this.request<PayeeDetailsResponse>(
+      'GET', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Extract full payee details.",
+      { payeeId, details: response }
+    );
+    console.log(`Gemini analysis for full payee details: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account - Personal Transfers
+  public async retrieveDestinationSourceAccountPersonalTransfers(
+    accessToken: string,
+    uuid: string
+  ): Promise<PersonalDomesticValidSrcDesAcctRes> {
+    const path = '/v1/moneyMovement/personalDomesticTransfers/destinationAccounts/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const response = await this.request<PersonalDomesticValidSrcDesAcctRes>(
+      'GET', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze personal domestic transfer source and destination accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for personal transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Personal Transfer (Preprocess)
+  public async createPersonalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: PreprocessFundTransferRequestPersonalTransfer
+  ): Promise<PreprocessForFundTransferResponse> {
+    const path = '/v1/moneyMovement/personalDomesticTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<PreprocessForFundTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze personal transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for personal transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm Personal Transfer
+  public async confirmPersonalTransfer(
+    accessToken: string,
+    uuid: string,
+    body: PersonalDomesticTransferRequest
+  ): Promise<PersonalDomesticTransferResponse> {
+    const path = '/v1/moneyMovement/personalDomesticTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<PersonalDomesticTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm personal transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for personal transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account - Internal Transfers
+  public async retrieveDestinationSourceAccountInternalTransfers(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<InternalDomesticValidSourceDestinationAcccountsResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<InternalDomesticValidSourceDestinationAcccountsResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze internal domestic transfer source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for internal transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Internal Transfer (Preprocess)
+  public async createInternalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: PreprocessFundTransferRequestInternalTransfer
+  ): Promise<PreprocessForFundTransferResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<PreprocessForFundTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze internal transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for internal transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm Internal Transfer
+  public async confirmInternalTransfer(
+    accessToken: string,
+    uuid: string,
+    body: InternalDomesticTransferRequest
+  ): Promise<InternalDomesticTransferResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<InternalDomesticTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm internal transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for internal transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Adhoc Internal Transfer (Preprocess)
+  public async createAdhocInternalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AdhocInternalDmstcTransferPreprocessRequest
+  ): Promise<AdhocInternalDmstcTransferPreprocessResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<AdhocInternalDmstcTransferPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc internal transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc internal transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account - External Transfers
+  public async retrieveDestinationSourceAccountExternalTransfers(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<ExtDmstcValidPayeeDestAcctsResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<ExtDmstcValidPayeeDestAcctsResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze external domestic transfer source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for external transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create External Transfer (Preprocess)
+  public async createExternalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: PreprocessFundTransferRequestExternalTransfer
+  ): Promise<PreprocessForFundTransferResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfer/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<PreprocessForFundTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze external transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for external transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm External Transfer
+  public async confirmExternalTransfer(
+    accessToken: string,
+    uuid: string,
+    body: ExternalDomesticTransferRequest
+  ): Promise<ExternalDomesticTransferResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<ExternalDomesticTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm external transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for external transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Adhoc External Transfer (Preprocess)
+  public async createAdhocExternalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AdhocExtDmstcTransferPreprocessRequest
+  ): Promise<AdhocExtDmstcTransferPreprocessResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<AdhocExtDmstcTransferPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc external transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc external transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account Bill Pay
+  public async retrieveDestinationSourceAccountBillPay(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<BillPaymentAccountPayeeEligibilityResponse> {
+    const path = '/v1/moneyMovement/billPayments/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<BillPaymentAccountPayeeEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze bill payment source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for bill payment accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Bill Payment (Preprocess)
+  public async createBillPaymentPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: BillPaymentsPreprocessRequest
+  ): Promise<BillPaymentsPreprocessResponse> {
+    const path = '/v1/moneyMovement/billPayments/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<BillPaymentsPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze bill payment preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for bill payment preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm Bill Payment
+  public async confirmBillPayment(
+    accessToken: string,
+    uuid: string,
+    body: BillPaymentsRequest
+  ): Promise<BillPaymentsResponse> {
+    const path = '/v1/moneyMovement/billPayments';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<BillPaymentsResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm bill payment and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for bill payment confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Adhoc Bill Payment (Preprocess)
+  public async createAdhocBillPaymentPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: BillPaymentsPreprocessRequest
+  ): Promise<BillPaymentsPreprocessResponse> {
+    const path = '/v1/moneyMovement/billPayments/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<BillPaymentsPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc bill payment preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc bill payment preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Merchant List
+  public async retrieveMerchantList(
+    accessToken: string,
+    uuid: string,
+    billerCategoryCode?: string
+  ): Promise<MerchantListResponse> {
+    const path = '/v1/moneyMovement/billPayments/merchants';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { billerCategoryCode };
+    const response = await this.request<MerchantListResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the retrieved merchant list.",
+      { billerCategoryCode, merchantsCount: response.merchantInformation?.length }
+    );
+    console.log(`Gemini analysis for merchant list: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Merchant Details
+  public async retrieveMerchantDetails(
+    accessToken: string,
+    uuid: string,
+    merchantNumber: string
+  ): Promise<MerchantDetailsResponse> {
+    const path = `/v1/moneyMovement/billPayments/merchants/${merchantNumber}`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const response = await this.request<MerchantDetailsResponse>(
+      'GET', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Extract merchant details.",
+      { merchantNumber, details: response }
+    );
+    console.log(`Gemini analysis for merchant details: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account Citi Global Transfer
+  public async retrieveDestinationSourceAccountCitiGlobalTransfer(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<CitiGlobalTransfersAccountPayeeEligibilityResponse> {
+    const path = '/v1/moneyMovement/citiGlobalTransfers/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<CitiGlobalTransfersAccountPayeeEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze Citi Global Transfer source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for Citi Global Transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Citi Global Transfer (Preprocess)
+  public async createCitiGlobalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: CitiGlobalTransfersPreprocessRequest
+  ): Promise<CitiGlobalTransfersPreprocessResponse> {
+    const path = '/v1/moneyMovement/citiGlobalTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<CitiGlobalTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze Citi Global Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for Citi Global Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm Citi Global Transfer
+  public async confirmCitiGlobalTransfer(
+    accessToken: string,
+    uuid: string,
+    body: CitiGlobalTransfersRequest,
+    clientDetails?: string
+  ): Promise<CitiGlobalTransfersResponse> {
+    const path = '/v1/moneyMovement/citiGlobalTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<CitiGlobalTransfersResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm Citi Global Transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for Citi Global Transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Adhoc Citi Global Transfer (Preprocess)
+  public async createAdhocCitiGlobalTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AdhocCitiGlobalTransfersPreprocessRequest
+  ): Promise<AdhocCitiGlobalTransfersPreprocessResponse> {
+    const path = '/v1/moneyMovement/citiGlobalTransfers/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<AdhocCitiGlobalTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc Citi Global Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc Citi Global Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account Cross Border Transfer
+  public async retrieveDestinationSourceAccountCrossBorderTransfer(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<CrossBorderWireTransfersAccountPayeeEligibilityResponse> {
+    const path = '/v1/moneyMovement/crossBorderWireTransfers/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<CrossBorderWireTransfersAccountPayeeEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze Cross Border Transfer source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for Cross Border Transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Cross Border Transfer (Preprocess)
+  public async createCrossBorderTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: CrossBorderWireTransfersPreprocessRequest
+  ): Promise<CrossBorderWireTransfersPreprocessResponse> {
+    const path = '/v1/moneyMovement/crossBorderWireTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<CrossBorderWireTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze Cross Border Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for Cross Border Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm Cross Border Transfer
+  public async confirmCrossBorderTransfer(
+    accessToken: string,
+    uuid: string,
+    body: CrossBorderWireTransfersRequest,
+    clientDetails?: string
+  ): Promise<CrossBorderWireTransfersResponse> {
+    const path = '/v1/moneyMovement/crossBorderWireTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<CrossBorderWireTransfersResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm Cross Border Transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for Cross Border Transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create Adhoc Cross Border Transfer (Preprocess)
+  public async createAdhocCrossBorderTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AdhocCrossBorderWireTransfersPreprocessRequest
+  ): Promise<AdhocCrossBorderWireTransfersPreprocessResponse> {
+    const path = '/v1/moneyMovement/crossBorderWireTransfers/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<AdhocCrossBorderWireTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc Cross Border Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc Cross Border Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve Destination Source Account SEPA
+  public async retrieveDestinationSourceAccountSepaTransfers(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string
+  ): Promise<SepaTransfersAccountPayeeEligibilityResponse> {
+    const path = '/v1/emea/moneyMovement/sepaTransfers/payees/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<SepaTransfersAccountPayeeEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze SEPA Transfer source and payee accounts.",
+      { response }
+    );
+    console.log(`Gemini analysis for SEPA Transfer accounts: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create SEPA Transfer (Preprocess)
+  public async createSepaTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: SepaTransfersPreprocessRequest
+  ): Promise<SepaTransfersPreprocessResponse> {
+    const path = '/v1/emea/moneyMovement/sepaTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<SepaTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze SEPA Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for SEPA Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm SEPA transfer
+  public async confirmSepaTransfer(
+    accessToken: string,
+    uuid: string,
+    body: SepaTransferRequest,
+    clientDetails?: string
+  ): Promise<SepaTransferResponse> {
+    const path = '/v1/moneyMovement/sepaTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<SepaTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm SEPA transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for SEPA Transfer confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Create adhoc SEPA transfer (Preprocess)
+  public async createAdhocSepaTransferPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AdhocSepaTransfersPreprocessRequest
+  ): Promise<AdhocSepaTransfersPreprocessResponse> {
+    const path = '/v1/emea/moneyMovement/sepaTransfers/preprocess/adhoc';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+    };
+    const response = await this.request<AdhocSepaTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc SEPA Transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc SEPA Transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm external domestic transfers post Multi Factor Authentication.
+  public async confirmExternalDomesticTransfersPostMFA(
+    accessToken: string,
+    uuid: string,
+    body: ExternalDomesticTransferConfirmationRequest,
+    clientDetails?: string
+  ): Promise<ExternalDomesticTransferConfirmationResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers/confirmation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<ExternalDomesticTransferConfirmationResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm external domestic transfer post MFA and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for external domestic transfer MFA confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Pre-process activities for transfer/payment that handle the exchange rate, fees and charges.
+  public async preprocessFundTransfer(
+    accessToken: string,
+    uuid: string,
+    body: PreprocessFundTransferRequest,
+    clientDetails?: string
+  ): Promise<PreprocessForFundTransferResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<PreprocessForFundTransferResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze fund transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for fund transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Preprocess activities for externalDomesticTransfer with payee enrollment.
+  public async adhocExtDmstcTransferPreprocessWithAddPayee(
+    accessToken: string,
+    uuid: string,
+    body: AdhocExtDmstcTransferPreprocessWithAddPayeeRequest,
+    clientDetails?: string
+  ): Promise<AdhocExtDmstcTransferPreprocessWithAddPayeeResponse> {
+    const path = '/v1/moneyMovement/externalDomesticTransfers/preprocess/adhocWithPayeeCreation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AdhocExtDmstcTransferPreprocessWithAddPayeeResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc external domestic transfer preprocess with payee creation.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc external domestic transfer with payee creation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm internal domestic transfers post Multi Factor Authentication.
+  public async confirmInternalDomesticTransfersPostMFA(
+    accessToken: string,
+    uuid: string,
+    body: InternalDomesticTransferConfirmationRequest,
+    clientDetails?: string
+  ): Promise<InternalDomesticTransferConfirmationResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers/confirmation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<InternalDomesticTransferConfirmationResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm internal domestic transfer post MFA and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for internal domestic transfer MFA confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Preprocess activities for adhoc transfers within CITIBANK for same country with payee enrollment.
+  public async adhocInternalDmstcTransferPreprocessWithAddPayee(
+    accessToken: string,
+    uuid: string,
+    body: AdhocInternalDmstcTransferPreprocessWithAddPayeeRequest,
+    clientDetails?: string
+  ): Promise<AdhocInternalDmstcTransferPreprocessWithAddPayeeResponse> {
+    const path = '/v1/moneyMovement/internalDomesticTransfers/preprocess/adhocWithPayeeCreation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AdhocInternalDmstcTransferPreprocessWithAddPayeeResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc internal domestic transfer preprocess with payee creation.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc internal domestic transfer with payee creation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Pre-process activities for adhoc proxy payments.
+  public async adhocAccountProxyTransfersPreprocessWithAddPayee(
+    accessToken: string,
+    uuid: string,
+    body: AdhocAccountProxyTransfersPreprocessWithAddPayeeRequest,
+    clientDetails?: string
+  ): Promise<AdhocAccountProxyTransfersPreprocessWithAddPayeeResponse> {
+    const path = '/v1/moneyMovement/accountProxyTransfers/preprocess/adhocWithPayeeCreation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AdhocAccountProxyTransfersPreprocessWithAddPayeeResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze adhoc account proxy transfer preprocess with payee creation.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for adhoc account proxy transfer with payee creation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve eligible source accounts for account proxy transfers.
+  public async accountProxyTransfersSourceAccountEligibility(
+    accessToken: string,
+    uuid: string,
+    proxyPaymentType: string,
+    nextStartIndex?: string,
+    clientDetails?: string
+  ): Promise<AccountProxyTransfersSourceAccountEligibilityResponse> {
+    const path = '/v1/moneyMovement/accountProxyTransfers/sourceAccounts';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { proxyPaymentType, nextStartIndex };
+    const response = await this.request<AccountProxyTransfersSourceAccountEligibilityResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze account proxy transfer source account eligibility.",
+      { proxyPaymentType, response }
+    );
+    console.log(`Gemini analysis for account proxy transfer source eligibility: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm personal domestic transfers post Multi Factor Authentication.
+  public async confirmPersonalDomesticTransfersPostMFA(
+    accessToken: string,
+    uuid: string,
+    body: PersonalDomesticTransferConfirmationRequest,
+    clientDetails?: string
+  ): Promise<PersonalDomesticTransferConfirmationResponse> {
+    const path = '/v1/moneyMovement/personalDomesticTransfers/confirmation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<PersonalDomesticTransferConfirmationResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm personal domestic transfer post MFA and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for personal domestic transfer MFA confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Inquire list of countries along with country code and country bank branch identifier.
+  public async retrieveDestinationCountries(
+    accessToken: string,
+    uuid: string,
+    nextStartIndex?: string,
+    clientDetails?: string
+  ): Promise<DestinationListResponse> {
+    const path = '/v1/moneyMovement/destinationCountries';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const queryParams = { nextStartIndex };
+    const response = await this.request<DestinationListResponse>(
+      'GET', path, accessToken, uuid, undefined, queryParams
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Summarize the list of destination countries.",
+      { countriesCount: response.paymentCountry?.length }
+    );
+    console.log(`Gemini analysis for destination countries: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Retrieve additional Bill details for an existing bill payments payee from Mpay.
+  public async billDetailsInquiry(
+    accessToken: string,
+    uuid: string,
+    payeeId: string,
+    clientDetails?: string
+  ): Promise<BillDetailsInquiryResponse> {
+    const path = `/v1/moneyMovement/billPayments/payees/${payeeId}/billDetails`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<BillDetailsInquiryResponse> {
+    const response = await this.request<BillDetailsInquiryResponse>(
+      'GET', path, accessToken, uuid
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Extract additional bill details for a payee.",
+      { payeeId, details: response }
+    );
+    console.log(`Gemini analysis for bill details inquiry: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Pre-process activities for proxy payments.
+  public async createAccountProxyTransfersPreprocess(
+    accessToken: string,
+    uuid: string,
+    body: AccountProxyTransfersPreprocessRequest,
+    clientDetails?: string
+  ): Promise<AccountProxyTransfersPreprocessResponse> {
+    const path = '/v1/moneyMovement/accountProxyTransfers/preprocess';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AccountProxyTransfersPreprocessResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Analyze account proxy transfer preprocess details.",
+      { request: body, controlFlowId: response.controlFlowId }
+    );
+    console.log(`Gemini analysis for account proxy transfer preprocess: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Confirm account proxy transfers post Multi Factor Authentication.
+  public async confirmAccountProxyTransfersPostMFA(
+    accessToken: string,
+    uuid: string,
+    body: AccountProxyTransfersConfirmationRequest,
+    clientDetails?: string
+  ): Promise<AccountProxyTransfersConfirmationResponse> {
+    const path = '/v1/moneyMovement/accountProxyTransfers/confirmation';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AccountProxyTransfersConfirmationResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Confirm account proxy transfer post MFA and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for account proxy transfer MFA confirmation: ${geminiAnalysis}`);
+    return response;
+  }
+
+  // Execute account proxy transfer
+  public async executeAccountProxyTransfers(
+    accessToken: string,
+    uuid: string,
+    body: AccountProxyTransfersRequest,
+    clientDetails?: string
+  ): Promise<AccountProxyTransfersResponse> {
+    const path = '/v1/moneyMovement/accountProxyTransfers';
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      uuid: uuid,
+      Accept: 'application/json',
+      client_id: this.client_id,
+      'Content-Type': 'application/json',
+      ...(clientDetails && { clientDetails }),
+    };
+    const response = await this.request<AccountProxyTransfersResponse>(
+      'POST', path, accessToken, uuid, body
+    );
+    const geminiAnalysis = await this.callGemini(
+      "Execute account proxy transfer and interpret results.",
+      { controlFlowId: body.controlFlowId, referenceId: response.transactionReferenceId }
+    );
+    console.log(`Gemini analysis for account proxy transfer execution: ${geminiAnalysis}`);
+    return response;
+  }
+}
+
+// --- Apollo Client Setup (Optional, for GraphQL integration if needed) ---
+// This part is illustrative if you were to wrap REST calls in GraphQL or interact with a GraphQL backend.
+// Not directly used by the MoneyMovementAPI class, but included in the original context.
+const client = new ApolloClient({
+  uri: 'http://localhost:4000/graphql', // Replace with your GraphQL server URI
+  cache: new InMemoryCache(),
+});
+
+// --- React Context and Hooks for API (Optional) ---
+// Provides a way to easily access the API client and manage common state like auth tokens.
+
+interface MoneyMovementContextType {
+  api: MoneyMovementAPI | null;
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  uuid: string;
+  generateNewUuid: () => void;
+  // Add other shared state/functions here
+}
+
+const MoneyMovementContext = createContext<MoneyMovementContextType | undefined>(undefined);
+
+interface MoneyMovementProviderProps {
+  children: React.ReactNode;
+}
+
+export const MoneyMovementProvider: React.FC<MoneyMovementProviderProps> = ({ children }) => {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [uuid, setUuid] = useState<string>(() => crypto.randomUUID()); // Initialize UUID on first render
+
+  useEffect(() => {
+    // Optionally, fetch initial access token or check session storage
+    const storedToken = localStorage.getItem('citi_access_token');
+    if (storedToken) {
+      setAccessToken(storedToken);
+    }
+  }, []);
+
+  const generateNewUuid = useCallback(() => {
+    setUuid(crypto.randomUUID());
+  }, []);
+
+  const api = new MoneyMovementAPI(API_BASE_URL, CLIENT_ID);
+
+  const contextValue = {
+    api,
+    accessToken,
+    setAccessToken: (token: string | null) => {
+      setAccessToken(token);
+      if (token) {
+        localStorage.setItem('citi_access_token', token);
+      } else {
+        localStorage.removeItem('citi_access_token');
+      }
+    },
+    uuid,
+    generateNewUuid,
+  };
+
+  return (
+    <MoneyMovementContext.Provider value={contextValue}>
+      {children}
+    </MoneyMovementContext.Provider>
+  );
+};
+
+export const useMoneyMovement = () => {
+  const context = useContext(MoneyMovementContext);
+  if (!context) {
+    throw new Error('useMoneyMovement must be used within a MoneyMovementProvider');
+  }
+  return context;
+};
+
+// --- WebSockets for real-time updates (Illustrative) ---
+// This section demonstrates how you might integrate WebSocket functionality.
+// In a real application, you'd manage connection state, re-connections, and message parsing.
+
+interface WebSocketMessage {
+  type: string;
+  payload: any;
+}
+
+export const useMoneyMovementWebSocket = (onMessage: (message: WebSocketMessage) => void) => {
+  useEffect(() => {
+    const ws = new WebSocket(WEBSOCKET_URL);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected to money movement webhooks.');
+      // Optionally send an auth token or subscription message
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data.toString());
+        onMessage(message);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected from money movement webhooks.');
+      // Implement re-connection logic here if needed
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [onMessage]);
+};
+
+// --- State Management with useReducer and Immer (Illustrative) ---
+// For more complex state, `useReducer` with `immer` can simplify updates.
+
+interface AppState {
+  transactions: TransactionDetails[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+type AppAction =
+  | { type: 'FETCH_TRANSACTIONS_START' }
+  | { type: 'FETCH_TRANSACTIONS_SUCCESS'; payload: TransactionDetails[] }
+  | { type: 'FETCH_TRANSACTIONS_FAILURE'; payload: string }
+  | { type: 'ADD_TRANSACTION'; payload: TransactionDetails }
+  | { type: 'UPDATE_TRANSACTION_STATUS'; payload: { transactionId: string; newStatus: string } };
+
+const appReducer = produce((draft: AppState, action: AppAction) => {
+  switch (action.type) {
+    case 'FETCH_TRANSACTIONS_START':
+      draft.isLoading = true;
+      draft.error = null;
+      break;
+    case 'FETCH_TRANSACTIONS_SUCCESS':
+      draft.isLoading = false;
+      draft.transactions = action.payload;
+      break;
+    case 'FETCH_TRANSACTIONS_FAILURE':
+      draft.isLoading = false;
+      draft.error = action.payload;
+      break;
+    case 'ADD_TRANSACTION':
+      draft.transactions.push(action.payload);
+      break;
+    case 'UPDATE_TRANSACTION_STATUS':
+      const index = draft.transactions.findIndex(t => t.transactionId === action.payload.transactionId);
+      if (index !== -1) {
+        draft.transactions[index].transactionStatus = action.payload.newStatus;
+      }
+      break;
+  }
+});
+
+// Example usage of the reducer:
+// const [appState, dispatch] = useReducer(appReducer, {
+//   transactions: [],
+//   isLoading: false,
+//   error: null,
+// });
+//
+// const fetchTransactions = async () => {
+//   dispatch({ type: 'FETCH_TRANSACTIONS_START' });
+//   try {
+//     // Assuming you have a way to call the API, e.g., from useMoneyMovement()
+//     // const response = await api.retrievePaymentInitiationTransactionMultipleTransfersStatus(...);
+//     // dispatch({ type: 'FETCH_TRANSACTIONS_SUCCESS', payload: response.transactionDetails || [] });
+//   } catch (error: any) {
+//     dispatch({ type: 'FETCH_TRANSACTIONS_FAILURE', payload: error.message });
+//   }
+// };
+
+// --- Export the API client for direct use if not using React context ---
+export const citiMoneyMovementAPI = new MoneyMovementAPI(API_BASE_URL, CLIENT_ID);
+
+// This setup provides a robust foundation for building a React application
+// that interacts with the Citi Money Movement API, including state management,
+// authentication context, and potential real-time updates via WebSockets.
