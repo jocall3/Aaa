@@ -1,0 +1,81 @@
+{
+  "type": "record",
+  "namespace": "com.elite.financial.payments.events",
+  "name": "PaymentInitiated",
+  "doc": "Event representing the initiation of a payment transaction. This is the first step in the payment saga.",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "Unique identifier for this event instance."
+    },
+    {
+      "name": "correlationId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "Identifier to correlate all events within the same business transaction (saga)."
+    },
+    {
+      "name": "timestamp",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "The UTC timestamp in milliseconds when the event was created."
+    },
+    {
+      "name": "paymentId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "Unique identifier for the payment aggregate."
+    },
+    {
+      "name": "sourceAccountId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "The account from which funds will be debited."
+    },
+    {
+      "name": "destinationAccountId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "The account to which funds will be credited."
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "record",
+        "name": "Money",
+        "namespace": "com.elite.financial.common.types",
+        "doc": "Represents a monetary value with currency.",
+        "fields": [
+          {
+            "name": "value",
+            "type": { "type": "bytes", "logicalType": "decimal", "precision": 19, "scale": 4 },
+            "doc": "The monetary amount as a decimal value."
+          },
+          {
+            "name": "currency",
+            "type": "string",
+            "doc": "ISO 4217 currency code."
+          }
+        ]
+      },
+      "doc": "The amount and currency of the payment."
+    },
+    {
+      "name": "paymentType",
+      "type": {
+        "type": "enum",
+        "name": "PaymentType",
+        "namespace": "com.elite.financial.payments.enums",
+        "symbols": ["INTERNAL_TRANSFER", "ACH", "WIRE", "RTP"]
+      },
+      "doc": "The type of payment rail to use."
+    },
+    {
+      "name": "reference",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional client-provided reference for the payment."
+    },
+    {
+      "name": "initiatedBy",
+      "type": "string",
+      "doc": "Identifier for the user or system that initiated the payment."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: accounts-service
+  description: Manages the lifecycle and state of user bank accounts, including balances and transactions. This service is a core component of the banking platform, built on DDD, CQRS, and Event Sourcing principles.
+  tags:
+    - microservice
+    - domain-driven-design
+    - cqrs
+    - event-sourcing
+    - accounts
+  annotations:
+    github.com/project-slug: 'elite-ai/financial-services-platform'
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-label-selector: 'app=accounts-service'
+    backstage.io/source-location: 'url:https://github.com/elite-ai/financial-services-platform/tree/main/services/accounts-service'
+  links:
+    - url: https://github.com/elite-ai/financial-services-platform/actions/workflows/ci.yaml
+      title: CI/CD Pipeline
+      icon: dashboard
+    - url: https://example.com/grafana/dashboards/f/accounts-service
+      title: Grafana Dashboard
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/accounts-domain-team
+  system: system:default/core-banking-platform
+  providesApis:
+    - api:default/accounts-service-api
+  dependsOn:
+    - resource:default/postgres-event-store # Logical name for the PostgreSQL instance
+    - resource:default/kafka-cluster         # Logical name for the Kafka cluster
+    - resource:default/elasticsearch-read-models # Logical name for Elasticsearch
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: accounts-service-api
+  description: The API for managing customer bank accounts, balances, and transactions. It follows a CQRS pattern with command and query endpoints.
+  tags:
+    - accounts
+    - rest
+    - openapi
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/accounts-domain-team
+  system: system:default/core-banking-platform
+  definition:
+    $text: ./openapi.yaml

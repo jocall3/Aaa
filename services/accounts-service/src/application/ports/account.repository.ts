@@ -1,48 +1,77 @@
 /**
- * @file This file defines the port for the account repository, outlining the contract
+ * @file account.repository.ts
+ * @description This file defines the port for the account repository, outlining the contract
  * for data persistence operations related to the Account aggregate in a Domain-Driven,
- * Event-Sourced architecture.
+ * Event-Sourced architecture. It adheres to the new Generic Repository Pattern.
  * @author Elite AI Implementation Team
- * @version 1.0.0
+ * @version 2.0.0
  */
 
-import { Account } from '../../domain/entities/account.entity';
+import { AccountAggregate } from '../../domain/model/account.aggregate';
+// import { ConcurrencyError, TransientInfrastructureError } from '@libs/error-framework'; // Assuming shared error library
+
+// NOTE: In a complete architecture, this generic interface would reside in a shared library (e.g., @libs/ddd-core).
+/**
+ * @interface IGenericRepository
+ * @template T - The type of the Aggregate Root.
+ * @description A generic repository interface for managing aggregate roots, as per the architectural
+ * directives. It defines the standard contract for persistence operations, abstracting the
+ * underlying data storage mechanism from the application's core logic.
+ *
+ * @method findById - Retrieves an aggregate by its unique identifier.
+ * @method save - Persists the state changes of an aggregate.
+ */
+export interface IGenericRepository<T> {
+  /**
+   * Finds an aggregate root by its unique identifier.
+   * For event-sourced aggregates, this involves retrieving the event stream
+   * and rehydrating the aggregate to its current state.
+   *
+   * @param {string} id - The unique identifier of the aggregate to find.
+   * @returns {Promise<T | null>} A promise that resolves to the rehydrated aggregate,
+   * or null if no event stream is found for the given ID.
+   * @throws {TransientInfrastructureError} If there is a temporary problem with the data store.
+   */
+  findById(id: string): Promise<T | null>;
+
+  /**
+   * Persists the state changes of an aggregate root.
+   * For event-sourced aggregates, this retrieves the uncommitted events from the
+   * aggregate and appends them to the event store, ensuring optimistic concurrency control.
+   *
+   * @param {T} aggregate - The aggregate instance with uncommitted events.
+   * @returns {Promise<void>} A promise that resolves when the events have been successfully persisted.
+   * @throws {ConcurrencyError} If an optimistic concurrency check fails during persistence.
+   * @throws {TransientInfrastructureError} If there is a temporary problem with the data store.
+   */
+  save(aggregate: T): Promise<void>;
+}
 
 /**
- * Represents the repository for managing Account aggregates.
- * As part of the Hexagonal Architecture, this interface is an output port, defining
- * how the application core communicates with persistence mechanisms.
- * In an Event Sourced system, this port is responsible for loading an aggregate's
- * state from its history of events and for persisting new state changes by
- * appending new events to the event store.
- *
  * @interface IAccountRepository
- * @see {@link Account} - The domain entity this repository manages.
+ * @extends IGenericRepository<AccountAggregate>
+ * @description Represents the specialized repository port for managing Account aggregates.
+ * It inherits the standard persistence methods from `IGenericRepository` and can be
+ * extended with account-specific query methods if needed (though queries should typically
+ * use a separate read repository in CQRS).
+ *
+ * As part of the Hexagonal Architecture, this is an output port, defining how the
+ * application core communicates with persistence mechanisms for the Account aggregate.
+ *
+ * @see {@link AccountAggregate} - The domain aggregate this repository manages.
+ * @see {@link IGenericRepository} - The generic interface it extends.
+ * @example
+ * ```typescript
+ * // In an application service or command handler:
+ * const account = await accountRepository.findById('some-account-id');
+ * if (account) {
+ *   account.deposit(100);
+ *   await accountRepository.save(account);
+ * }
+ * ```
  */
-export interface IAccountRepository {
-  /**
-   * Finds an Account aggregate by its unique identifier.
-   * This method retrieves the full history of events for the given accountId
-   * from the event store and rehydrates the Account aggregate to its current state.
-   *
-   * @public
-   * @param {string} accountId - The unique identifier of the account to find.
-   * @returns {Promise<Account | null>} A promise that resolves to the rehydrated Account aggregate,
-   * or null if no event stream is found for the given ID.
-   * @throws {Error} Throws an error if there is a problem accessing the data store or rehydrating the aggregate.
-   */
-  findById(accountId: string): Promise<Account | null>;
-
-  /**
-   * Persists the state changes of an Account aggregate.
-   * This method retrieves the uncommitted events from the Account aggregate root
-   * and appends them to the corresponding event stream in the event store.
-   * It should ensure optimistic concurrency control by checking the aggregate's version.
-   *
-   * @public
-   * @param {Account} account - The Account aggregate instance with uncommitted events.
-   * @returns {Promise<void>} A promise that resolves when the events have been successfully persisted.
-   * @throws {Error} Throws a concurrency exception or other persistence-related errors.
-   */
-  save(account: Account): Promise<void>;
+export interface IAccountRepository extends IGenericRepository<AccountAggregate> {
+  // Currently, no account-specific methods are needed for the write repository.
+  // findById and save are sufficient for event-sourced aggregate management.
+  // Account-specific queries would be part of a separate IAccountReadRepository port.
 }
