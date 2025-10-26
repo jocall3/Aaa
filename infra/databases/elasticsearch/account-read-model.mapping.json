@@ -1,0 +1,246 @@
+{
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "accountId": {
+        "type": "keyword"
+      },
+      "customerId": {
+        "type": "keyword"
+      },
+      "userIds": {
+        "type": "keyword"
+      },
+      "accountGroup": {
+        "type": "keyword"
+      },
+      "productName": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "accountNickname": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "accountDescription": {
+        "type": "text"
+      },
+      "displayAccountNumber": {
+        "type": "keyword"
+      },
+      "currencyCode": {
+        "type": "keyword"
+      },
+      "accountStatus": {
+        "type": "keyword"
+      },
+      "balanceType": {
+        "type": "keyword"
+      },
+      "owner": {
+        "properties": {
+          "name": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "address": {
+            "type": "text"
+          },
+          "city": {
+            "type": "keyword"
+          },
+          "state": {
+            "type": "keyword"
+          },
+          "postalCode": {
+            "type": "keyword"
+          },
+          "country": {
+            "type": "keyword"
+          }
+        }
+      },
+      "currentBalance": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "availableBalance": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "availableCredit": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "creditLimit": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "minimumDueAmount": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "lastStatementBalance": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "cashAdvanceLimit": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "cashAdvanceAvailableAmount": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "lastPaymentAmount": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "totalPortfolioBalanceAmount": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "accountValue": {
+        "type": "scaled_float",
+        "scaling_factor": 100
+      },
+      "paymentDueDate": {
+        "type": "date"
+      },
+      "lastStatementDate": {
+        "type": "date"
+      },
+      "lastPaymentDate": {
+        "type": "date"
+      },
+      "maturityDate": {
+        "type": "date"
+      },
+      "asOfDateTime": {
+        "type": "date"
+      },
+      "purchasesAPR": {
+        "type": "float"
+      },
+      "advancesAPR": {
+        "type": "float"
+      },
+      "autoPayFlag": {
+        "type": "boolean"
+      },
+      "accountTradingCapableFlag": {
+        "type": "boolean"
+      },
+      "maturityTerm": {
+        "type": "keyword"
+      },
+      "accountRegistrationType": {
+        "type": "keyword"
+      },
+      "holdings": {
+        "type": "nested",
+        "properties": {
+          "cusip": {
+            "type": "keyword"
+          },
+          "symbol": {
+            "type": "keyword"
+          },
+          "securityName": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "holdingCategory": {
+            "type": "keyword"
+          },
+          "assetClass": {
+            "type": "keyword"
+          },
+          "quantity": {
+            "type": "double"
+          },
+          "price": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "totalValueAmount": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "changeInPercent": {
+            "type": "float"
+          },
+          "changeInPrice": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "changeInValue": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "previousPrice": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          }
+        }
+      },
+      "retirementPlanComponents": {
+        "type": "nested",
+        "properties": {
+          "componentName": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "currencyCode": {
+            "type": "keyword"
+          },
+          "currentTerms": {
+            "type": "keyword"
+          },
+          "totalValueAmount": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "interestPaidYTD": {
+            "type": "scaled_float",
+            "scaling_factor": 100
+          },
+          "nextMaturityDate": {
+            "type": "date"
+          }
+        }
+      },
+      "createdAt": {
+        "type": "date"
+      },
+      "updatedAt": {
+        "type": "date"
+      }
+    }
+  }
+}
