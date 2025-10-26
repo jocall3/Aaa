@@ -1,246 +1,296 @@
 /**
- * @fileoverview Main entry point for the IAM (Identity and Access Management) microservice.
- * This service acts as a central OAuth 2.1 / OIDC provider for the entire platform.
+ * @file Main entry point for the IAM (Identity and Access Management) microservice.
+ * @description This service acts as a central OAuth 2.1 / OIDC provider for the entire platform.
  * It is responsible for user authentication, issuing JWTs, service-to-service authentication,
- * and managing access control policies.
+ * and managing access control policies. It uses the 'oidc-provider' library and a PostgreSQL backend.
  * @version 1.0.0
+ * @module IamService
  */
 
-// Import necessary Node.js and third-party modules.
+import 'dotenv/config';
+import http from 'http';
+import path from 'path';
+import crypto from 'crypto';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
-import http from 'http';
+import { Provider, Configuration, Account } from 'oidc-provider';
+import { Pool } from 'pg';
+import bcrypt from 'bcrypt';
+import pino from 'pino';
+import pinoHttp from 'pino-http';
 
-// As per the Hexagonal Architecture, we import ports and adapters.
-// These are placeholder imports as the actual files would be generated elsewhere.
-import { ILoggerPort } from './ports/logger.port';
-import { ConsoleLoggerAdapter } from './adapters/secondary/logger/console-logger.adapter';
-import { VaultAdapter } from './adapters/secondary/vault/vault.adapter';
-import { ISecretStorePort } from './ports/secret-store.port';
-import { createApiRouter } from './adapters/primary/http/api.router';
-import { AppConfig, loadConfig } from './config';
-import { DatabaseAdapter } from './adapters/secondary/database/database.adapter';
-import { IDatabasePort } from './ports/database.port';
+const logger = pino({ level: process.env.LOG_LEVEL || 'info', transport: { target: 'pino-pretty' } });
+
+// --- Configuration --- 
+const config = {
+  port: parseInt(process.env.PORT || '3002', 10),
+  issuer: process.env.ISSUER || 'http://localhost:3002',
+  postgres: {
+    connectionString: process.env.IAM_DATABASE_URL || 'postgresql://iam_user:iam_password@localhost:5432/iam_db',
+  },
+  cookies: {
+    long: { signed: true, maxAge: 24 * 60 * 60 * 1000 }, // 1 day in ms
+    short: { signed: true },
+    keys: process.env.COOKIE_KEYS ? process.env.COOKIE_KEYS.split(',') : ['some-long-secret-for-cookie-signing'],
+  },
+};
+
+// --- Persistence Adapters ---
 
 /**
- * Main application class for the IAM service.
- * Encapsulates the Express server and all its dependencies, following the composition root pattern.
- * @class IamApplication
+ * @class UserService
+ * @description A simple service to manage user accounts in the PostgreSQL database.
+ * In a real application, this would be a more robust repository pattern implementation.
  */
-class IamApplication {
-    /**
-     * The Express application instance.
-     * @private
-     * @type {Express}
-     */
-    private readonly app: Express;
+class UserService {
+  /**
+   * @param {Pool} db - The PostgreSQL connection pool.
+   */
+  constructor(private db: Pool) {}
 
-    /**
-     * The HTTP server instance.
-     * @private
-     * @type {http.Server}
-     */
-    private server!: http.Server;
-
-    /**
-     * The application configuration.
-     * @private
-     * @type {AppConfig}
-     */
-    private readonly config: AppConfig;
-
-    /**
-     * The logger instance, implementing the logger port.
-     * @private
-     * @type {ILoggerPort}
-     */
-    private readonly logger: ILoggerPort;
-
-    /**
-     * The secret store adapter for HashiCorp Vault.
-     * @private
-     * @type {ISecretStorePort}
-     */
-    private readonly secretStore: ISecretStorePort;
-    
-    /**
-     * The database adapter.
-     * @private
-     * @type {IDatabasePort}
-     */
-    private readonly database: IDatabasePort;
-
-    /**
-     * Constructs the IamApplication instance.
-     * This is where the application's dependency graph is composed.
-     * @constructor
-     */
-    constructor() {
-        this.logger = new ConsoleLoggerAdapter();
-        this.logger.info('IAM Service: Initializing application...');
-
-        this.config = loadConfig();
-        this.app = express();
-
-        // Instantiate secondary adapters (driven side)
-        this.secretStore = new VaultAdapter(this.config.vault, this.logger);
-        this.database = new DatabaseAdapter(this.config.database, this.logger);
-
-        this.configureMiddleware();
-        this.configureRoutes();
-        this.configureErrorHandling();
+  /**
+   * Finds a user by their email and verifies their password.
+   * @param {string} email - The user's email.
+   * @param {string} password - The user's plain-text password.
+   * @returns {Promise<any | null>} The user record if credentials are valid, otherwise null.
+   */
+  async findByCredentials(email: string, password: string): Promise<any | null> {
+    const { rows } = await this.db.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = rows[0];
+    if (user && (await bcrypt.compare(password, user.password_hash))) {
+      return user;
     }
+    return null;
+  }
 
-    /**
-     * Configures the core Express middleware.
-     * @private
-     */
-    private configureMiddleware(): void {
-        this.logger.info('IAM Service: Configuring middleware...');
-        this.app.use(helmet());
-        this.app.use(cors(this.config.cors));
-        this.app.use(express.json());
-        this.app.use(express.urlencoded({ extended: true }));
-
-        // Simple request logger middleware
-        this.app.use((req: Request, res: Response, next: NextFunction) => {
-            this.logger.info(`Incoming request: ${req.method} ${req.originalUrl}`);
-            next();
-        });
-    }
-
-    /**
-     * Configures the API routes by instantiating the primary HTTP adapter.
-     * @private
-     */
-    private configureRoutes(): void {
-        this.logger.info('IAM Service: Configuring API routes...');
-        // The primary adapter (driving side) for HTTP is the API router.
-        // We inject the necessary dependencies (core services, which in turn use secondary adapters).
-        const apiRouter = createApiRouter({
-            logger: this.logger,
-            secretStore: this.secretStore,
-            database: this.database,
-            config: this.config
-            // Other core services would be instantiated and passed here
-        });
-        this.app.use('/api/iam/v1', apiRouter);
-
-        // Health check endpoint
-        this.app.get('/health', (req: Request, res: Response) => {
-            res.status(200).json({ status: 'UP' });
-        });
-    }
-
-    /**
-     * Configures centralized error handling middleware.
-     * @private
-     */
-    private configureErrorHandling(): void {
-        this.logger.info('IAM Service: Configuring error handling...');
-        // 404 handler for routes not found
-        this.app.use((req: Request, res: Response, next: NextFunction) => {
-            res.status(404).json({
-                error: {
-                    type: 'NotFound',
-                    message: `Resource not found at ${req.method} ${req.originalUrl}`,
-                },
-            });
-        });
-
-        // Global error handler
-        this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-            this.logger.error('An unhandled error occurred:', err);
-            // In production, we would not send the stack trace
-            const isProduction = this.config.nodeEnv === 'production';
-            res.status(500).json({
-                error: {
-                    type: 'InternalServerError',
-                    message: isProduction ? 'An unexpected error occurred.' : err.message,
-                    stack: isProduction ? undefined : err.stack,
-                },
-            });
-        });
-    }
-
-    /**
-     * Starts the IAM service application.
-     * It initializes dependencies like the secret store and database connection,
-     * then starts the HTTP server.
-     * @public
-     * @returns {Promise<void>}
-     */
-    public async start(): Promise<void> {
-        try {
-            this.logger.info('IAM Service: Starting application...');
-            // Initialize asynchronous dependencies
-            await this.secretStore.initialize();
-            this.logger.info('IAM Service: Secret store initialized.');
-            await this.database.connect();
-            this.logger.info('IAM Service: Database connection established.');
-
-            this.server = this.app.listen(this.config.port, () => {
-                this.logger.info(`IAM Service: Server is running on port ${this.config.port}`);
-                this.logger.info(`IAM Service: Current environment is ${this.config.nodeEnv}`);
-            });
-        } catch (error) {
-            this.logger.error('IAM Service: Failed to start application', error);
-            process.exit(1);
-        }
-    }
-    
-    /**
-     * Stops the application gracefully.
-     * @public
-     * @returns {Promise<void>}
-     */
-    public async stop(): Promise<void> {
-        this.logger.info('IAM Service: Stopping application...');
-        return new Promise((resolve, reject) => {
-            if (this.server) {
-                this.server.close(async (err) => {
-                    if (err) {
-                        this.logger.error('IAM Service: Error during server shutdown', err);
-                        return reject(err);
-                    }
-                    try {
-                        await this.database.disconnect();
-                        this.logger.info('IAM Service: Database connection closed.');
-                    } catch (dbError) {
-                        this.logger.error('IAM Service: Error closing database connection', dbError);
-                    }
-                    this.logger.info('IAM Service: Server has been shut down gracefully.');
-                    resolve();
-                });
-            } else {
-                resolve();
-            }
-        });
-    }
+  /**
+   * Finds a user by their ID.
+   * @param {string} id - The user's unique ID.
+   * @returns {Promise<any | null>} The user record if found, otherwise null.
+   */
+  async findById(id: string): Promise<any | null> {
+    const { rows } = await this.db.query('SELECT * FROM users WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
 }
 
 /**
- * Bootstraps and runs the IAM service application.
- * This self-invoking function handles the main execution flow and graceful shutdown.
+ * @class AccountService
+ * @description Implements the `findAccount` logic required by oidc-provider.
  */
-(async () => {
-    const app = new IamApplication();
-    
-    await app.start();
+class AccountService {
+  /**
+   * Finds a user account and prepares it for the OIDC provider.
+   * @param {object} _ctx - The OIDC context.
+   * @param {string} id - The user ID (subject).
+   * @returns {Promise<Account | undefined>} An OIDC-compatible account object.
+   */
+  static async findAccount(_ctx: unknown, id: string): Promise<Account | undefined> {
+    const user = await userService.findById(id);
+    if (!user) {
+      return undefined;
+    }
 
+    return {
+      accountId: user.id,
+      async claims() {
+        return {
+          sub: user.id,
+          email: user.email,
+          email_verified: user.email_verified,
+          given_name: user.first_name,
+          family_name: user.last_name,
+        };
+      },
+    };
+  }
+}
+
+// --- OIDC Provider Setup ---
+
+const oidcConfig: Configuration = {
+  adapter: (name: string) => ({ // A simple in-memory adapter for demonstration. A DB adapter is needed for production.
+    name,
+    async upsert(id, payload, expiresIn) {
+      // In a real app, this would use a database.
+    },
+    async find(id) { return undefined; },
+    async findByUserCode(userCode) { return undefined; },
+    async findByUid(uid) { return undefined; },
+    async destroy(id) {},
+    async revokeByGrantId(grantId) {},
+    async consume(id) {},
+  }),
+  clients: [
+    {
+      client_id: 'test_client',
+      client_secret: 'test_secret',
+      grant_types: ['authorization_code', 'refresh_token'],
+      redirect_uris: ['https://jwt.io', 'http://localhost:3000/callback'],
+      response_types: ['code'],
+    },
+  ],
+  cookies: config.cookies,
+  pkce: {
+    required: () => false, // Set to true in production for public clients
+  },
+  claims: {
+    openid: ['sub'],
+    email: ['email', 'email_verified'],
+    profile: ['given_name', 'family_name'],
+  },
+  features: {
+    devInteractions: { enabled: false }, // Disable dev interactions for custom UI
+    deviceFlow: { enabled: true },
+    revocation: { enabled: true },
+  },
+  jwks: {
+    keys: [
+      {
+        d: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        dp: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        dq: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        e: 'AQAB',
+        kty: 'RSA',
+        n: 'p-VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        p: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        q: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+        qi: 'VEZOsY07JTFzGT7JqL3EcOkd_RR_4So7_EaGmmDRGr1iS13h2kM5w2_VqC6n_2e4u6nLpS2aY_2n_f9j-K-8d_f',
+      },
+    ],
+  },
+  findAccount: AccountService.findAccount,
+};
+
+// --- Application Bootstrap ---
+
+let dbPool: Pool;
+let userService: UserService;
+
+/**
+ * @function bootstrap
+ * @description Initializes and starts the IAM service application.
+ * @returns {Promise<http.Server>}
+ */
+async function bootstrap(): Promise<http.Server> {
+  logger.info('IAM Service: Bootstrapping...');
+
+  // 1. Initialize Database
+  dbPool = new Pool({ connectionString: config.postgres.connectionString });
+  dbPool.on('error', (err) => logger.error(err, 'Unexpected error on idle client'));
+  await dbPool.query('SELECT NOW()');
+  logger.info('IAM Service: PostgreSQL connection established.');
+  userService = new UserService(dbPool);
+
+  // 2. Initialize OIDC Provider
+  const provider = new Provider(config.issuer, oidcConfig);
+
+  // 3. Initialize Express App
+  const app: Express = express();
+  app.use(helmet());
+  app.use(pinoHttp({ logger }));
+  app.use(express.urlencoded({ extended: true }));
+  app.set('trust proxy', 'loopback');
+
+  // Health check endpoint
+  app.get('/health', (req, res) => res.status(200).json({ status: 'UP' }));
+
+  // OIDC Interaction Routes
+  app.use('/interaction/:uid', async (req, res, next) => {
+    try {
+      const details = await provider.interactionDetails(req, res);
+      const { uid, prompt, params } = details;
+
+      if (prompt.name === 'login') {
+        return res.send(`
+          <h1>Login</h1>
+          <form method="post" action="/interaction/${uid}/login">
+            <input type="email" name="email" placeholder="Enter your email" value="test@example.com"><br>
+            <input type="password" name="password" placeholder="Enter your password" value="password"><br>
+            <button type="submit">Sign-in</button>
+          </form>
+        `);
+      }
+
+      return res.send(`
+        <h1>Consent</h1>
+        <p>Client ${params.client_id} wants to access your data.</p>
+        <form method="post" action="/interaction/${uid}/confirm">
+          <button type="submit">Allow</button>
+        </form>
+      `);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.post('/interaction/:uid/login', async (req, res, next) => {
+    try {
+      const { uid } = req.params;
+      const { email, password } = req.body;
+      const account = await userService.findByCredentials(email, password);
+      
+      if (!account) {
+        res.send(`<h1>Invalid credentials</h1><a href="/interaction/${uid}">Try again</a>`);
+        return;
+      }
+
+      const result = { login: { accountId: account.id } };
+      await provider.interactionFinished(req, res, result, { mergeWithLastSubmission: false });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/interaction/:uid/confirm', async (req, res, next) => {
+    try {
+      const result = { consent: { grantId: '' } }; // grantId will be generated by the provider
+      await provider.interactionFinished(req, res, result, { mergeWithLastSubmission: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Mount OIDC provider
+  app.use('/', provider.callback());
+
+  // Centralized Error Handling (placeholder for shared error framework)
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    logger.error({ err, req }, 'An unhandled error occurred');
+    if (!res.headersSent) {
+      res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected error occurred.' });
+    }
+  });
+  
+  const server = http.createServer(app);
+  
+  return new Promise((resolve, reject) => {
+    server.listen(config.port, () => {
+      logger.info(`IAM Service: Server is running on port ${config.port}`);
+      logger.info(`IAM Service: OIDC discovery URL: ${config.issuer}/.well-known/openid-configuration`);
+      resolve(server);
+    });
+    server.on('error', reject);
+  });
+}
+
+// --- Main Execution with Graceful Shutdown ---
+
+if (require.main === module) {
+  bootstrap().then(server => {
     const shutdown = async (signal: string) => {
-        console.info(`IAM Service: Received ${signal}. Starting graceful shutdown...`);
-        try {
-            await app.stop();
-            process.exit(0);
-        } catch (error) {
-            console.error('IAM Service: Graceful shutdown failed', error);
-            process.exit(1);
-        }
+      logger.warn(`IAM Service: Received ${signal}. Shutting down gracefully...`);
+      server.close(async () => {
+        if (dbPool) await dbPool.end();
+        logger.info('IAM Service: Shutdown complete.');
+        process.exit(0);
+      });
     };
 
-    // Listen for shutdown signals
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
-})();
+  }).catch(err => {
+    logger.fatal({ err }, 'IAM Service: Failed to bootstrap');
+    process.exit(1);
+  });
+}
