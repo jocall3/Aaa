@@ -1,0 +1,185 @@
+{
+  "Comment": "Saga orchestration for a distributed payment transaction, as per architectural directive. This state machine uses Amazon States Language (ASL) to manage a long-running transaction across payments-service, accounts-service, and rewards-service. It includes compensating transactions to ensure data consistency in case of failures.",
+  "StartAt": "ProcessPayment",
+  "States": {
+    "ProcessPayment": {
+      "Type": "Task",
+      "Comment": "Step 1: Invoke the payments-service to process the payment and create a payment record. Waits for a callback.",
+      "Resource": "arn:aws:states:::events:putEvents.waitForTaskToken",
+      "Parameters": {
+        "Entries": [
+          {
+            "Detail": {
+              "taskToken.$": "$$.Task.Token",
+              "command": "ProcessPayment",
+              "payload": {
+                "correlationId.$": "$$.Execution.Id",
+                "userId.$": "$.userId",
+                "sourceAccountId.$": "$.sourceAccountId",
+                "destinationAccountId.$": "$.destinationAccountId",
+                "amount.$": "$.amount",
+                "currency.$": "$.currency"
+              }
+            },
+            "DetailType": "Payments.Command",
+            "EventBusName": "platform-event-bus",
+            "Source": "saga.orchestrator.payment"
+          }
+        ]
+      },
+      "ResultPath": "$.paymentTaskResult",
+      "Next": "DebitSourceAccount",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "PaymentFailed"
+        }
+      ]
+    },
+    "DebitSourceAccount": {
+      "Type": "Task",
+      "Comment": "Step 2: Invoke the accounts-service to debit the source account.",
+      "Resource": "arn:aws:states:::events:putEvents.waitForTaskToken",
+      "Parameters": {
+        "Entries": [
+          {
+            "Detail": {
+              "taskToken.$": "$$.Task.Token",
+              "command": "DebitAccount",
+              "payload": {
+                "correlationId.$": "$$.Execution.Id",
+                "paymentId.$": "$.paymentTaskResult.paymentId",
+                "accountId.$": "$.sourceAccountId",
+                "amount.$": "$.amount"
+              }
+            },
+            "DetailType": "Accounts.Command",
+            "EventBusName": "platform-event-bus",
+            "Source": "saga.orchestrator.payment"
+          }
+        ]
+      },
+      "ResultPath": "$.debitTaskResult",
+      "Next": "CreditRewardsPoints",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "RefundPayment"
+        }
+      ]
+    },
+    "CreditRewardsPoints": {
+      "Type": "Task",
+      "Comment": "Step 3: Invoke the rewards-service to credit loyalty points to the user.",
+      "Resource": "arn:aws:states:::events:putEvents.waitForTaskToken",
+      "Parameters": {
+        "Entries": [
+          {
+            "Detail": {
+              "taskToken.$": "$$.Task.Token",
+              "command": "AddRewardPoints",
+              "payload": {
+                "correlationId.$": "$$.Execution.Id",
+                "userId.$": "$.userId",
+                "paymentId.$": "$.paymentTaskResult.paymentId",
+                "amount.$": "$.amount"
+              }
+            },
+            "DetailType": "Rewards.Command",
+            "EventBusName": "platform-event-bus",
+            "Source": "saga.orchestrator.payment"
+          }
+        ]
+      },
+      "ResultPath": "$.rewardsTaskResult",
+      "Next": "PaymentSuccessful",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "CreditSourceAccount"
+        }
+      ]
+    },
+    "PaymentSuccessful": {
+      "Type": "Succeed",
+      "Comment": "The payment saga completed successfully."
+    },
+    "CreditSourceAccount": {
+      "Type": "Task",
+      "Comment": "COMPENSATION: Re-credit the source account after a rewards-service failure.",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Detail": {
+              "command": "CreditAccount",
+              "payload": {
+                "correlationId.$": "$$.Execution.Id",
+                "originalTransactionId.$": "$.debitTaskResult.transactionId",
+                "accountId.$": "$.sourceAccountId",
+                "amount.$": "$.amount",
+                "reason": "Saga compensation due to rewards failure."
+              }
+            },
+            "DetailType": "Accounts.Command.Compensation",
+            "EventBusName": "platform-event-bus",
+            "Source": "saga.orchestrator.payment"
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "RefundPayment",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "CompensationFailed"
+        }
+      ]
+    },
+    "RefundPayment": {
+      "Type": "Task",
+      "Comment": "COMPENSATION: Refund/cancel the initial payment.",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "Detail": {
+              "command": "CancelPayment",
+              "payload": {
+                "correlationId.$": "$$.Execution.Id",
+                "paymentId.$": "$.paymentTaskResult.paymentId",
+                "reason": "Saga compensation due to downstream failure."
+              }
+            },
+            "DetailType": "Payments.Command.Compensation",
+            "EventBusName": "platform-event-bus",
+            "Source": "saga.orchestrator.payment"
+          }
+        ]
+      },
+      "ResultPath": null,
+      "Next": "PaymentFailed",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "CompensationFailed"
+        }
+      ]
+    },
+    "PaymentFailed": {
+      "Type": "Fail",
+      "Comment": "The payment saga failed and compensating transactions were issued.",
+      "Error": "PaymentSagaFailed",
+      "Cause": "One or more steps in the payment process failed and were rolled back."
+    },
+    "CompensationFailed": {
+      "Type": "Fail",
+      "Comment": "A compensation transaction failed, requiring manual intervention.",
+      "Error": "CriticalError.CompensationFailed",
+      "Cause": "A compensating transaction could not be completed. The system may be in an inconsistent state. Manual intervention is required."
+    }
+  }
+}
