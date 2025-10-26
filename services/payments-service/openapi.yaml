@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: Payments Service
+  description: |-
+    This service is responsible for managing all aspects of payments within the platform, adhering to a Domain-Driven, Event-Sourced, CQRS-based architecture.
+    It provides commands to initiate and manage payments, and queries to retrieve payment status and history.
+    All state changes are published as events to a Kafka topic.
+  version: 1.0.0
+  contact:
+    name: Elite AI Implementation Team - Payments Squad
+    email: payments-squad@example.com
+servers:
+  - url: https://api.example.com/payments
+    description: Production Server
+  - url: https://api.sandbox.example.com/payments
+    description: Sandbox Server
+tags:
+  - name: Payments Commands
+    description: Endpoints for initiating and modifying payment states (Write-side of CQRS).
+  - name: Payments Queries
+    description: Endpoints for retrieving payment information (Read-side of CQRS).
+  - name: Webhooks
+    description: Webhook definitions for asynchronous event notifications.
+
+paths:
+  /v1/payments:
+    post:
+      tags:
+        - Payments Commands
+      summary: Initiate a Payment
+      description: |
+        Initiates a new payment transfer. This is an asynchronous command.
+        The service validates the request and, upon acceptance, creates a `PaymentInitiated` event.
+        The actual processing of the payment happens in the background.
+        This endpoint is idempotent; sending the same request with the same `Idempotency-Key` will not result in a duplicate payment.
+      operationId: initiatePayment
+      security:
+        - BearerAuth: [payments:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        description: Details of the payment to be initiated.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInitiationRequest'
+      responses:
+        '202':
+          description: |
+            The payment initiation request has been accepted for processing.
+            The response includes the unique ID for the payment and its initial status.
+          headers:
+            Location:
+              description: The URL to retrieve the status of the newly created payment.
+              schema:
+                type: string
+                format: uri
+                example: /v1/payments/c4f3b2a0-7b6a-4b0e-8d3a-9e6b3f7e1b5c
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInitiationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    get:
+      tags:
+        - Payments Queries
+      summary: List Payments
+      description: |
+        Retrieves a paginated list of payments for the authenticated user or service.
+        Supports filtering by status and date range. The results are based on a denormalized read model for high performance.
+      operationId: listPayments
+      security:
+        - BearerAuth: [payments:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          description: Filter payments by their current status.
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - name: fromDate
+          in: query
+          description: The start of the date range to filter payments (ISO 8601 format).
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          description: The end of the date range to filter payments (ISO 8601 format).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: A paginated list of payments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/payments/{paymentId}:
+    get:
+      tags:
+        - Payments Queries
+      summary: Get Payment by ID
+      description: Retrieves the complete details and current status of a specific payment by its unique ID.
+      operationId: getPaymentById
+      security:
+        - BearerAuth: [payments:read]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Successfully retrieved payment details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+webhooks:
+  paymentEvent:
+    description: This webhook is triggered whenever a payment's state changes. Subscribing services will receive real-time updates on payment processing.
+    post:
+      summary: Payment State Change Event
+      operationId: onPaymentEvent
+      requestBody:
+        description: The event payload containing details about the state change.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentEvent'
+      responses:
+        '200':
+          description: The webhook event was successfully received and acknowledged.
+        '400':
+          description: The event payload was malformed or invalid.
+        '500':
+          description: The webhook consumer failed to process the event.
+
+components:
+  schemas:
+    # --- Request/Response DTOs ---
+    PaymentInitiationRequest:
+      type: object
+      description: The details required to initiate a new payment.
+      required:
+        - sourceAccountId
+        - destination
+        - amount
+        - paymentType
+        - reference
+      properties:
+        sourceAccountId:
+          type: string
+          format: uuid
+          description: The unique identifier of the source account for the funds.
+          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+        destination:
+          $ref: '#/components/schemas/PaymentDestination'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        paymentType:
+          type: string
+          description: The type of payment rail to use.
+          enum: [INTERNAL_TRANSFER, ACH, WIRE, RTP]
+          example: "INTERNAL_TRANSFER"
+        reference:
+          type: string
+          description: A client-provided reference for the payment, which will appear on statements.
+          maxLength: 140
+          example: "Invoice #INV-2023-10-001"
+        description:
+          type: string
+          description: An optional internal description or memo for the payment.
+          maxLength: 255
+          example: "Monthly payment for services"
+
+    PaymentInitiationResponse:
+      type: object
+      description: The response after a payment initiation request has been accepted.
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          description: The unique identifier assigned to this payment.
+          example: "c4f3b2a0-7b6a-4b0e-8d3a-9e6b3f7e1b5c"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        createdAt:
+          type: string
+          format: date-time
+          description: The timestamp when the payment request was accepted.
+          example: "2023-10-27T10:00:00Z"
+
+    PaymentView:
+      type: object
+      description: A read-only projection of a payment's state.
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          description: The unique identifier of the payment.
+          readOnly: true
+          example: "c4f3b2a0-7b6a-4b0e-8d3a-9e6b3f7e1b5c"
+        sourceAccountId:
+          type: string
+          format: uuid
+          description: The source account for the funds.
+          readOnly: true
+          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+        destination:
+          $ref: '#/components/schemas/PaymentDestination'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        paymentType:
+          type: string
+          description: The payment rail used.
+          readOnly: true
+          enum: [INTERNAL_TRANSFER, ACH, WIRE, RTP]
+          example: "INTERNAL_TRANSFER"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        reference:
+          type: string
+          description: The client-provided reference for the payment.
+          readOnly: true
+          example: "Invoice #INV-2023-10-001"
+        description:
+          type: string
+          description: The internal description or memo for the payment.
+          readOnly: true
+          example: "Monthly payment for services"
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the payment was initiated.
+          readOnly: true
+          example: "2023-10-27T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the payment's state was last updated.
+          readOnly: true
+          example: "2023-10-27T10:05:00Z"
+        completedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the payment reached a terminal state (COMPLETED or FAILED).
+          readOnly: true
+          nullable: true
+          example: "2023-10-27T10:15:00Z"
+        failureReason:
+          type: string
+          description: A description of why the payment failed, if applicable.
+          readOnly: true
+          nullable: true
+          example: "Insufficient funds"
+
+    PaginatedPaymentList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentView'
+        pagination:
+          type: object
+          properties:
+            nextCursor:
+              type: string
+              nullable: true
+              description: The cursor to use to fetch the next page of results. Null if there are no more pages.
+              example: "eyJvZmZzZXQiOjEwMH0="
+            hasNextPage:
+              type: boolean
+              description: Indicates if there is a next page of results.
+
+    PaymentEvent:
+      type: object
+      description: The payload sent to a webhook endpoint upon a payment state change.
+      required:
+        - eventId
+        - eventType
+        - timestamp
+        - data
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: A unique identifier for this specific event.
+          example: "evt_1234567890abcdef"
+        eventType:
+          type: string
+          description: The type of event that occurred.
+          enum:
+            - payment.initiated
+            - payment.processing
+            - payment.completed
+            - payment.failed
+            - payment.cancelled
+          example: "payment.completed"
+        apiVersion:
+          type: string
+          description: The API version used to generate the event payload.
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          description: The timestamp when the event was generated.
+          example: "2023-10-27T10:15:00Z"
+        data:
+          type: object
+          description: The object that the event pertains to.
+          properties:
+            object:
+              $ref: '#/components/schemas/PaymentView'
+
+    # --- Reusable Sub-schemas ---
+    Amount:
+      type: object
+      description: Represents a monetary amount.
+      required:
+        - value
+        - currency
+      properties:
+        value:
+          type: string
+          description: The monetary amount as a string to avoid floating-point errors.
+          pattern: '^[0-9]+(\.[0-9]{1,2})?$'
+          example: "150.75"
+        currency:
+          type: string
+          description: The three-letter ISO 4217 currency code.
+          example: "USD"
+
+    PaymentDestination:
+      type: object
+      description: The destination for the payment.
+      required:
+        - accountId
+      properties:
+        accountId:
+          type: string
+          format: uuid
+          description: The unique identifier of the destination account.
+          example: "f0e9d8c7-b6a5-4f3e-2d1c-0b9a8e7d6c5b"
+
+    PaymentStatus:
+      type: string
+      description: The current status of the payment throughout its lifecycle.
+      enum:
+        - PENDING_VALIDATION
+        - ACCEPTED
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+        - CANCELLED
+      example: "PROCESSING"
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: A service-specific error code.
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: A human-readable description of the error.
+          example: "The source account ID is not valid."
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "sourceAccountId"
+              issue:
+                type: string
+                example: "must be a valid UUID"
+          description: An array of specific field-level validation errors.
+
+  # --- Reusable Parameters ---
+  parameters:
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      description: The unique identifier of the payment.
+      schema:
+        type: string
+        format: uuid
+        example: "c4f3b2a0-7b6a-4b0e-8d3a-9e6b3f7e1b5c"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        A unique key to ensure that the request is processed only once.
+        It is recommended to use a UUID. The server will store this key for at least 24 hours.
+      schema:
+        type: string
+        format: uuid
+        example: "123e4567-e89b-12d3-a456-426614174000"
+    Limit:
+      name: limit
+      in: query
+      description: The maximum number of items to return.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      description: A cursor for use in pagination, returned in a previous response.
+      schema:
+        type: string
+
+  # --- Reusable Responses ---
+  responses:
+    BadRequest:
+      description: The request was malformed or contained invalid parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication credentials were missing or invalid.
+    Forbidden:
+      description: The authenticated user does not have permission to perform this action.
+    NotFound:
+      description: The requested resource could not be found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: |
+        A conflict occurred, such as an idempotency key being reused with a different request payload.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: |
+        The request was well-formed but was unable to be followed due to semantic errors (e.g., business rule violation like insufficient funds).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  # --- Security Schemes ---
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        A short-lived JWT issued by the central IAM service.
+        The token must be included in the `Authorization` header as `Bearer <token>`.
+
+security:
+  - BearerAuth: []
