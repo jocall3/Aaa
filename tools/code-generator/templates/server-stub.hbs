@@ -1,0 +1,122 @@
+/**
+ * @file This file contains the generated Express.js router for the {{pascalCase info.title}} service.
+ * @summary It acts as the primary adapter for handling incoming HTTP requests (Web Adapter).
+ * @description This router is automatically generated from the OpenAPI specification for the service.
+ * It sets up route handlers for each defined endpoint, validates incoming requests against
+ * the generated validation schemas, and delegates the actual business logic to the corresponding
+ * application port. The router is designed to be used within an Express.js application.
+ *
+ * DO NOT MODIFY THIS FILE MANUALLY.
+ * This file is managed by the code generation framework and will be overwritten on each run.
+ * To make changes, update the OpenAPI specification and re-run the code generator.
+ */
+
+import { Router, Request, Response, NextFunction } from 'express';
+import { {{pascalCase info.title}}Port } from '../ports/{{kebabCase info.title}}.port';
+{{#if (hasBodyOrParams paths)}}import { validate } from '../middleware/validation.middleware';{{/if}}
+{{#if (hasBody paths)}}import * as DTOs from '../dtos';{{/if}}
+{{#if (hasBodyOrParams paths)}}import * as Schemas from '../schemas';{{/if}}
+
+/**
+ * @class
+ * @classdesc Creates and configures an Express Router for the {{pascalCase info.title}} API.
+ * This class wires up all the endpoints defined in the OpenAPI specification
+ * to their respective handlers, which in turn delegate to the application's core logic
+ * via the injected service port.
+ */
+export class {{pascalCase info.title}}Router {
+  /**
+   * The configured Express Router instance.
+   * @public
+   * @type {Router}
+   */
+  public router: Router;
+
+  /**
+   * An instance of the service port that implements the core business logic.
+   * @private
+   * @type { {{pascalCase info.title}}Port }
+   */
+  private servicePort: {{pascalCase info.title}}Port;
+
+  /**
+   * @constructor
+   * @param { {{pascalCase info.title}}Port } servicePort - An instance of the port that implements the core business logic.
+   */
+  constructor(servicePort: {{pascalCase info.title}}Port) {
+    this.servicePort = servicePort;
+    this.router = Router();
+    this.initializeRoutes();
+  }
+
+  /**
+   * Initializes all the routes for the service by mapping OpenAPI paths to handler methods.
+   * @private
+   */
+  private initializeRoutes(): void {
+    {{#each paths}}
+    {{#each this}}
+
+    // Operation: {{this.operationId}}
+    this.router.{{@key}}(
+      '{{@../path}}',
+      {{#if this.security}}
+      // TODO: Add authentication and authorization middleware based on security schemes:
+      // {{stringify this.security}}
+      {{/if}}
+      {{#if (hasParamsIn this.parameters 'params')}}validate(Schemas.{{pascalCase this.operationId}}ParamsSchema, 'params'),{{/if}}
+      {{#if (hasParamsIn this.parameters 'query')}}validate(Schemas.{{pascalCase this.operationId}}QuerySchema, 'query'),{{/if}}
+      {{#if this.requestBody}}validate(Schemas.{{getSchemaName (lookup (lookup (lookup this.requestBody 'content') 'application/json') 'schema').$ref}}Schema, 'body'),{{/if}}
+      this.{{camelCase this.operationId}}.bind(this)
+    );
+    {{/each}}
+    {{/each}}
+  }
+
+  {{#each paths}}
+  {{#each this}}
+  /**
+   * @handler {{toUpperCase @key}} {{@../path}}
+   * @summary {{this.summary}}
+   * @description {{{this.description}}}
+   * @operationId {{this.operationId}}
+   * @private
+   * @param {Request} req - The Express request object, validated by middleware.
+   * @param {Response} res - The Express response object.
+   * @param {NextFunction} next - The Express next middleware function.
+   * @returns {Promise<void>}
+   */
+  private async {{camelCase this.operationId}}(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      /**
+       * @typedef {object} HandlerContext - Contextual information for the service port call.
+       * @property {object} [user] - The authenticated user/principal making the request. Populated by auth middleware.
+       * @property {string} correlationId - A unique ID for tracing the request across services. Populated by tracing middleware.
+       */
+      const context = {
+        user: (req as any).user,
+        correlationId: (req as any).correlationId || 'unknown-correlation-id',
+      };
+
+      const result = await this.servicePort.{{camelCase this.operationId}}({
+        {{#each this.parameters}}
+        {{#if (eq this.in "path")}}...req.params,{{/if}}
+        {{#if (eq this.in "query")}}...req.query,{{/if}}
+        {{/each}}
+        {{#if this.requestBody}}
+        body: req.body as DTOs.{{getSchemaName (lookup (lookup (lookup this.requestBody 'content') 'application/json') 'schema').$ref}},
+        {{/if}}
+        context,
+      });
+
+      // The port method returns a result with a status code and body.
+      // This decouples the core logic from HTTP-specific response codes.
+      res.status(result.statusCode).json(result.body);
+    } catch (error) {
+      // Pass errors to the centralized error handling middleware.
+      next(error);
+    }
+  }
+  {{/each}}
+  {{/each}}
+}
