@@ -1,0 +1,159 @@
+# This manifest defines the Kubernetes resources for the centralized Policy Enforcement Service,
+# as mandated by the architectural directive to externalize authorization.
+# It deploys Open Policy Agent (OPA) as a standalone service within the cluster.
+#
+# Resources included:
+# 1. Service: Exposes the OPA API to other services in the cluster.
+# 2. ConfigMap: Stores the authorization policies written in Rego.
+# 3. Deployment: Manages the OPA server pods.
+#
+# This service is consumed by the API gateway layer to make authorization decisions
+# before forwarding requests to downstream microservices.
+---
+# 1. Service to expose the OPA server.
+apiVersion: v1
+kind: Service
+metadata:
+  # The service name used for service discovery within the cluster.
+  name: policy-enforcement-service
+  namespace: microservices-platform
+  labels:
+    app: policy-enforcement-service
+spec:
+  # Expose the OPA server on port 8181.
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8181
+      targetPort: 8181
+  # Selects the OPA pods managed by the Deployment.
+  selector:
+    app: policy-enforcement-service
+---
+# 2. ConfigMap to store the Rego authorization policies.
+# Policies are managed centrally here and can be updated without redeploying the service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-enforcement-service-policies
+  namespace: microservices-platform
+  labels:
+    app: policy-enforcement-service
+data:
+  # The main policy file. OPA will evaluate the 'allow' rule by default.
+  auth.rego: |
+    package httpapi.authz
+
+    # By default, deny all requests. This aligns with a Zero Trust security model.
+    default allow = false
+
+    # --- Rule Definitions ---
+
+    # Allow any authenticated user to perform read-only operations (GET, HEAD, OPTIONS).
+    allow {
+        is_read_only_request(input.method)
+        is_authenticated
+    }
+
+    # Allow users with the 'admin' role to perform any action.
+    allow {
+        is_admin
+    }
+
+    # Allow users to access their own account data.
+    # Assumes path format like '/accounts/{accountId}/...'
+    allow {
+        input.method == "GET"
+        is_authenticated
+        account_id := get_path_segment(input.path, 1)
+        account_id == "accounts"
+        get_path_segment(input.path, 2) == input.user.sub
+    }
+
+    # --- Helper Functions ---
+
+    # Checks if the user is authenticated (e.g., JWT is present and valid).
+    # The API Gateway is expected to provide this decoded JWT payload in the input.
+    is_authenticated {
+        input.user.sub
+    }
+
+    # Checks if the user has the 'admin' role.
+    is_admin {
+        "admin" in input.user.roles
+    }
+
+    # Checks if the HTTP method is for read-only operations.
+    is_read_only_request(method) {
+        method == "GET"
+    }
+    is_read_only_request(method) {
+        method == "HEAD"
+    }
+    is_read_only_request(method) {
+        method == "OPTIONS"
+    }
+
+    # Helper to get a specific segment from the request path.
+    get_path_segment(path, index) = output {
+        parts := split(trim(path, "/"), "/")
+        output := parts[index]
+    }
+---
+# 3. Deployment to run the OPA server pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-enforcement-service
+  namespace: microservices-platform
+  labels:
+    app: policy-enforcement-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: policy-enforcement-service
+  template:
+    metadata:
+      labels:
+        app: policy-enforcement-service
+    spec:
+      containers:
+        - name: opa
+          # Use a specific, vetted version of the OPA image.
+          image: openpolicyagent/opa:0.62.1
+          args:
+            - "run"
+            - "--server"
+            # Load all .rego files from the /policies directory.
+            - "/policies"
+            # Log level for OPA server.
+            - "--log-level=info"
+            # Optional: Enable decision logging to the console for debugging.
+            - "--set=decision_logs.console=true"
+          ports:
+            - name: http
+              containerPort: 8181
+              protocol: TCP
+          # Liveness and readiness probes to ensure the OPA server is healthy.
+          readinessProbe:
+            httpGet:
+              path: /health?bundles
+              port: 8181
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8181
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: opa-policies
+              mountPath: /policies
+              readOnly: true
+      volumes:
+        - name: opa-policies
+          configMap:
+            # Mounts the ConfigMap defined above into the pod.
+            name: policy-enforcement-service-policies
