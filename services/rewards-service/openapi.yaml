@@ -1,0 +1,403 @@
+openapi: 3.0.3
+info:
+  title: Rewards Service
+  description: |-
+    This service manages customer rewards, including loyalty points balances, earning points, and redeeming them.
+    It adheres to a CQRS and Event-Sourced architecture. Commands are processed asynchronously.
+    All endpoints are secured via the platform's central IAM service using JWT Bearer tokens.
+  version: 1.0.0
+  contact:
+    name: Elite AI Implementation Team
+    email: elite-ai-team@example.com
+servers:
+  - url: /api/rewards/v1
+    description: Rewards Service v1
+tags:
+  - name: Rewards Queries
+    description: Read-only operations to query rewards data.
+  - name: Rewards Commands
+    description: Write operations to command changes in the rewards domain.
+paths:
+  /users/{userId}/rewards-account:
+    get:
+      tags:
+        - Rewards Queries
+      summary: Get User's Rewards Account
+      description: Retrieves the current state of a user's rewards account, including their points balance.
+      operationId: getRewardsAccountByUserId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: The unique identifier for the user.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successfully retrieved the rewards account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardsAccount'
+        '401':
+          description: Unauthorized. The JWT is missing, invalid, or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User or rewards account not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: [rewards:read]
+  /users/{userId}/rewards-account/transactions:
+    get:
+      tags:
+        - Rewards Queries
+      summary: Get Points Transactions
+      description: Retrieves a list of transactions showing how points were earned or redeemed by a user.
+      operationId: getPointsTransactionsByUserId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: The unique identifier for the user.
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of transactions to return.
+          schema:
+            type: integer
+            default: 25
+            maximum: 100
+        - name: nextCursor
+          in: query
+          description: Opaque cursor for paginating to the next set of results.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of points transactions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointsTransactionList'
+        '401':
+          description: Unauthorized. The JWT is missing, invalid, or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User or rewards account not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: [rewards:read]
+  /commands/earn-points:
+    post:
+      tags:
+        - Rewards Commands
+      summary: Earn Reward Points
+      description: Accepts a command to award points to a user's rewards account. The command is processed asynchronously.
+      operationId: earnPoints
+      requestBody:
+        description: Details of the points to be earned.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EarnPointsCommand'
+      responses:
+        '202':
+          description: Command accepted for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandAcceptedResponse'
+        '400':
+          description: Invalid command format or data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. The JWT is missing, invalid, or expired. This endpoint likely requires service-level authorization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict. A command with the same idempotency key has already been processed with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: [rewards:write]
+  /commands/redeem-points:
+    post:
+      tags:
+        - Rewards Commands
+      summary: Redeem Reward Points
+      description: Accepts a command to redeem (spend) points from a user's rewards account. The command is processed asynchronously.
+      operationId: redeemPoints
+      requestBody:
+        description: Details of the points to be redeemed.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemPointsCommand'
+      responses:
+        '202':
+          description: Command accepted for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandAcceptedResponse'
+        '400':
+          description: Invalid command format, data, or insufficient points.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. The JWT is missing, invalid, or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict. A command with the same idempotency key has already been processed with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: [rewards:write]
+components:
+  schemas:
+    RewardsAccount:
+      type: object
+      description: Represents a user's loyalty rewards account.
+      required:
+        - userId
+        - pointsBalance
+        - status
+        - lastUpdatedAt
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The unique identifier for the user associated with this rewards account.
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        pointsBalance:
+          type: integer
+          format: int64
+          description: The current total of redeemable points.
+          example: 15750
+        status:
+          type: string
+          description: The status of the rewards account.
+          enum: [ACTIVE, SUSPENDED, CLOSED]
+          example: ACTIVE
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: The timestamp of the last update to the account.
+          example: "2023-10-27T10:00:00Z"
+        tier:
+          type: string
+          description: The loyalty tier of the user.
+          enum: [BRONZE, SILVER, GOLD, PLATINUM]
+          example: "GOLD"
+    PointsTransaction:
+      type: object
+      description: A single transaction of earning or redeeming points.
+      required:
+        - transactionId
+        - type
+        - points
+        - transactionDate
+        - description
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: The unique identifier for this points transaction.
+          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+        type:
+          type: string
+          description: The type of transaction.
+          enum: [EARN, REDEEM, ADJUSTMENT, EXPIRATION]
+          example: "EARN"
+        points:
+          type: integer
+          format: int32
+          description: The number of points involved in the transaction. Positive for earning, negative for redeeming.
+          example: 500
+        transactionDate:
+          type: string
+          format: date-time
+          description: The timestamp when the transaction occurred.
+          example: "2023-10-26T14:30:00Z"
+        description:
+          type: string
+          description: A human-readable description of the transaction.
+          example: "Points earned from purchase at Merchant XYZ"
+        relatedEntityId:
+          type: string
+          format: uuid
+          description: The identifier of the related entity (e.g., purchase ID, redemption order ID).
+          example: "f0e9d8c7-b6a5-4321-fedc-ba9876543210"
+    PointsTransactionList:
+      type: object
+      description: A paginated list of points transactions.
+      required:
+        - transactions
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointsTransaction'
+        nextCursor:
+          type: string
+          description: An opaque cursor for retrieving the next page of results. Null if there are no more results.
+          example: "cGFnZT0yJmxpbWl0PTI1"
+    EarnPointsCommand:
+      type: object
+      description: Command payload to award points to a user.
+      required:
+        - idempotencyKey
+        - userId
+        - points
+        - reason
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+          description: A unique key to prevent duplicate processing of the command.
+          example: "aaabbbccc-111-222-333-abcabcabcabc"
+        userId:
+          type: string
+          format: uuid
+          description: The user who will receive the points.
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        points:
+          type: integer
+          format: int32
+          description: The number of points to award. Must be a positive integer.
+          example: 500
+          minimum: 1
+        reason:
+          type: string
+          description: A brief, machine-readable reason for the points being awarded.
+          example: "QUALIFYING_PURCHASE"
+        description:
+          type: string
+          description: A detailed, human-readable description for the transaction log.
+          example: "Points earned from purchase at Merchant XYZ"
+        originatingTransactionId:
+          type: string
+          format: uuid
+          description: The ID of the transaction from another service (e.g., Payments) that triggered this command.
+          example: "f0e9d8c7-b6a5-4321-fedc-ba9876543210"
+    RedeemPointsCommand:
+      type: object
+      description: Command payload to redeem points from a user's account.
+      required:
+        - idempotencyKey
+        - userId
+        - points
+        - reason
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+          description: A unique key to prevent duplicate processing of the command.
+          example: "dddeeefff-444-555-666-defdefdefdef"
+        userId:
+          type: string
+          format: uuid
+          description: The user who is redeeming the points.
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        points:
+          type: integer
+          format: int32
+          description: The number of points to redeem. Must be a positive integer. The user must have a sufficient balance.
+          example: 2500
+          minimum: 1
+        reason:
+          type: string
+          description: A brief, machine-readable reason for the redemption.
+          example: "PRODUCT_REDEMPTION"
+        description:
+          type: string
+          description: A detailed, human-readable description for the transaction log.
+          example: "Redeemed for $25 Gift Card"
+        redemptionOrderId:
+          type: string
+          format: uuid
+          description: The ID for the redemption order or item being purchased with points.
+          example: "09876543-abcd-fedc-ba98-76543210abcd"
+    CommandAcceptedResponse:
+      type: object
+      description: Standard response for a successfully accepted command.
+      required:
+        - commandId
+        - status
+      properties:
+        commandId:
+          type: string
+          format: uuid
+          description: The unique idempotency key of the command that was accepted.
+          example: "aaabbbccc-111-222-333-abcabcabcabc"
+        status:
+          type: string
+          description: The status of the command submission.
+          example: "ACCEPTED_FOR_PROCESSING"
+        timestamp:
+          type: string
+          format: date-time
+          description: The timestamp when the command was accepted.
+          example: "2023-10-27T10:05:00Z"
+    ErrorResponse:
+      type: object
+      required:
+        - type
+        - code
+        - details
+      properties:
+        type:
+          type: string
+          description: The type of error.
+          example: "invalid"
+        code:
+          type: string
+          description: A machine-readable error code.
+          example: "INVALID_PARAMETER"
+        details:
+          type: string
+          description: A human-readable description of the error.
+          example: "The 'userId' parameter must be a valid UUID."
+        location:
+          type: string
+          description: The location of the error (e.g., a specific field in the request body).
+          example: "body.userId"
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Authentication using a JWT Bearer token issued by the central IAM service.
+        The token should be included in the 'Authorization' header.
