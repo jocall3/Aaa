@@ -2,24 +2,27 @@
   "name": "@mfe/account-list",
   "version": "1.0.0",
   "private": true,
-  "description": "Micro-frontend for displaying the list of customer accounts.",
+  "description": "Micro-frontend for displaying the list of customer accounts. Integrates with the GraphQL BFF and the federated state bus.",
   "scripts": {
-    "start": "webpack serve --config config/webpack.dev.js",
-    "build": "webpack --config config/webpack.prod.js",
+    "start": "cross-env NODE_ENV=development webpack serve --config webpack.config.js",
+    "build": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "test": "jest",
     "lint": "eslint 'src/**/*.{js,jsx,ts,tsx}'",
     "format": "prettier --write 'src/**/*.{js,jsx,ts,tsx,css,md}'"
   },
   "dependencies": {
-    "@banking/accounts-sdk": "^1.0.0",
-    "@banking/design-system": "^1.0.0",
+    "@apollo/client": "^3.9.5",
+    "@bank/design-system": "^1.0.0",
+    "@elite-ai/federated-state-bus": "^1.0.0",
     "@emotion/react": "^11.10.0",
     "@emotion/styled": "^11.10.0",
     "@mui/icons-material": "^5.10.0",
     "@mui/material": "^5.10.0",
+    "graphql": "^16.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.4.0"
+    "react-router-dom": "^6.4.0",
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@babel/core": "^7.19.0",
@@ -34,6 +37,7 @@
     "@typescript-eslint/eslint-plugin": "^5.37.0",
     "@typescript-eslint/parser": "^5.37.0",
     "babel-loader": "^8.2.5",
+    "cross-env": "^7.0.3",
     "css-loader": "^6.7.1",
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",

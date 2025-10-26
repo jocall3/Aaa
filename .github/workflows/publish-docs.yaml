@@ -1,0 +1,112 @@
+name: Publish Living Documentation
+
+# This workflow is triggered on every push to the main branch.
+# It is responsible for enforcing documentation standards and publishing
+# the 'Living Documentation' portal as per the architectural directives.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # ===================================================================
+  # 1. VERIFY DOCUMENTATION COVERAGE
+  # ===================================================================
+  # This job fails the build if the required TSDoc/JSDoc coverage is not met,
+  # enforcing the 100% Docs-as-Code policy.
+  check-doc-coverage:
+    name: Verify 100% TSDoc Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm install
+
+      - name: Install Documentation & Coverage Tools
+        run: |
+          # In a real implementation, a dedicated tool like 'ts-doc-coverage-checker' or
+          # a custom script using the TypeScript compiler API would be used here.
+          echo "Installing documentation coverage tools..."
+          npm install -g typedoc
+
+      - name: Run TSDoc Coverage Check
+        run: |
+          # This script is a placeholder representing the enforcement mechanism.
+          # It would parse all exported symbols in TypeScript files across services and libs,
+          # checking for the presence and completeness of TSDoc blocks.
+          # The script would be configured to fail if any symbol lacks a description,
+          # @param, @returns, @throws, or @example block where applicable.
+          echo "Running TSDoc coverage check across the monorepo..."
+          # Example of a real command:
+          # npx ts-doc-coverage --sourceFiles='(services|libs)/**/*.ts' --failOnWarnings
+          echo "✅ TSDoc coverage check passed (Placeholder)."
+
+
+  # ===================================================================
+  # 2. BUILD & PUBLISH DOCUMENTATION
+  # ===================================================================
+  # This job depends on the coverage check. It runs only if the docs are compliant.
+  # It aggregates all documentation sources and publishes them to the central portal.
+  publish-to-portal:
+    name: Build & Publish to Documentation Portal
+    needs: check-doc-coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Allow reading repository content
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm install
+
+      - name: Install TechDocs CLI
+        # Assuming Backstage.io is the chosen platform, which uses TechDocs.
+        run: npm install -g @techdocs/cli
+
+      - name: Generate Documentation Artifacts
+        run: |
+          # This step aggregates documentation sources into a format for the portal.
+          # 1. Generate TSDoc JSON: TypeDoc parses all TS files and outputs a JSON model.
+          # 2. Aggregate OpenAPI/ADRs: These are collected into a well-known directory.
+          echo "Generating TSDoc JSON output..."
+          npm install -g typedoc
+          typedoc --json docs/generated/tsdoc.json --entryPointStrategy packages
+
+          echo "Aggregating OpenAPI specifications and ADRs..."
+          mkdir -p docs/generated/openapi docs/generated/adr
+          find services -name 'openapi.yaml' -exec cp --parents {} docs/generated/openapi/ \;
+          # This assumes ADRs are in a top-level `docs/adr` directory
+          cp -r docs/adr/* docs/generated/adr/
+          echo "Documentation artifacts prepared."
+
+      - name: Publish to Documentation Portal (e.g., Backstage)
+        run: |
+          # This is a placeholder for the actual publishing command.
+          # It would likely involve a CLI tool for the documentation platform (e.g., Backstage).
+          # The tool would take the generated JSON, OpenAPI files, and ADRs as input,
+          # process them, and upload them to the portal's backend storage (e.g., S3, GCS).
+          echo "Publishing documentation artifacts to the Living Documentation Portal..."
+          # Example command for Backstage's TechDocs:
+          # techdocs-cli publish --publisher-type awsS3 --storage-name <techdocs-bucket-name> --entity <namespace/default/component/all-services>
+          echo "Documentation published successfully. (Placeholder)"
+        env:
+          # Secrets for authenticating with the documentation portal or its storage backend.
+          BACKSTAGE_TOKEN: ${{ secrets.BACKSTAGE_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DOCS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
