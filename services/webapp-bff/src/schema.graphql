@@ -1,0 +1,287 @@
+"""
+Custom scalar type for representing dates and times in ISO 8601 format.
+"""
+scalar DateTime
+
+"""
+Custom scalar type for representing high-precision decimal values, used for monetary amounts.
+"""
+scalar Decimal
+
+"""
+Represents a monetary amount, including the numeric value and its currency code.
+"""
+type Money {
+  """The numeric amount, represented as a high-precision decimal."""
+  amount: Decimal!
+
+  """The ISO 4217 currency code (e.g., "USD", "EUR")."""
+  currency: String!
+}
+
+"""
+Represents the currently authenticated user of the application.
+"""
+type User {
+  """Unique identifier for the user (UUID)."""
+  id: ID!
+
+  """User's first name."""
+  firstName: String!
+
+  """User's last name."""
+  lastName: String!
+
+  """User's primary email address."""
+  email: String!
+
+  """List of all bank accounts associated with the user."""
+  accounts: [Account!]!
+
+  """The user's rewards account information, if they are enrolled."""
+  rewardsAccount: RewardsAccount
+}
+
+"""
+Enumeration of possible account types.
+"""
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+}
+
+"""
+Enumeration of possible account statuses.
+"""
+enum AccountStatus {
+  OPEN
+  CLOSED
+  FROZEN
+}
+
+"""
+Represents a user's bank account, which holds a balance and a list of transactions.
+This type aggregates data primarily from the 'accounts-service'.
+"""
+type Account {
+  """Unique identifier for the account (UUID)."""
+  id: ID!
+
+  """The type of the account (e.g., CHECKING, SAVINGS)."""
+  accountType: AccountType!
+
+  """A user-defined nickname for the account for easy identification."""
+  nickname: String
+
+  """The current status of the account."""
+  status: AccountStatus!
+
+  """The current balance of the account."""
+  balance: Money!
+
+  """
+  A list of transactions for this account. Supports cursor-based pagination.
+  """
+  transactions(first: Int = 20, after: String): TransactionConnection!
+}
+
+"""
+Enumeration of possible transaction types.
+"""
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+"""
+Enumeration of possible transaction statuses.
+"""
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+"""
+Represents a single financial transaction on an account.
+"""
+type Transaction {
+  """Unique identifier for the transaction (UUID)."""
+  id: ID!
+
+  """The type of the transaction (e.g., DEPOSIT, WITHDRAWAL)."""
+  type: TransactionType!
+
+  """The current status of the transaction."""
+  status: TransactionStatus!
+
+  """The monetary amount of the transaction."""
+  amount: Money!
+
+  """A short, user-facing description of the transaction."""
+  description: String!
+
+  """The timestamp when the transaction occurred."""
+  timestamp: DateTime!
+}
+
+"""
+A connection to a list of transactions, conformant with the Relay pagination spec.
+"""
+type TransactionConnection {
+  """Information to aid in pagination."""
+  pageInfo: PageInfo!
+
+  """A list of edges, each containing a transaction and a cursor."""
+  edges: [TransactionEdge!]!
+}
+
+"""
+An edge in a connection, containing a node (the transaction) and a cursor for pagination.
+"""
+type TransactionEdge {
+  """A cursor for use in pagination."""
+  cursor: String!
+
+  """The item at the end of the edge (the transaction itself)."""
+  node: Transaction!
+}
+
+"""
+Information about pagination in a connection, conformant with the Relay spec.
+"""
+type PageInfo {
+  """Indicates if there are more items to fetch."""
+  hasNextPage: Boolean!
+
+  """The cursor for the last item in the current page of results."""
+  endCursor: String
+}
+
+"""
+Enumeration of possible loyalty rewards tiers.
+"""
+enum RewardsTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+"""
+Represents a user's loyalty rewards account.
+This type aggregates data primarily from the 'rewards-service'.
+"""
+type RewardsAccount {
+  """Unique identifier for the rewards account (UUID)."""
+  id: ID!
+
+  """The current balance of redeemable reward points."""
+  pointsBalance: Int!
+
+  """The user's current loyalty tier."""
+  tier: RewardsTier!
+}
+
+"""
+Enumeration of possible payment (fund transfer) statuses.
+"""
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+"""
+Represents a payment or transfer of funds between accounts.
+This type is the result of a mutation and aggregates data from the 'payments-service'.
+"""
+type Payment {
+  """Unique identifier for the payment (UUID)."""
+  id: ID!
+
+  """The current status of the payment."""
+  status: PaymentStatus!
+
+  """The monetary amount of the payment."""
+  amount: Money!
+
+  """The account from which the funds were sent."""
+  sourceAccount: Account!
+
+  """The account to which the funds were sent."""
+  destinationAccount: Account!
+
+  """Timestamp when the payment was initiated."""
+  createdAt: DateTime!
+
+  """Timestamp when the payment state was last updated."""
+  updatedAt: DateTime!
+
+  """Reason for failure, if the payment failed."""
+  failureReason: String
+}
+
+"""
+The root for all read operations in the schema.
+"""
+type Query {
+  """
+  Retrieves the currently authenticated user, serving as the entry point to the user's data graph.
+  Aggregates data from 'iam-service', 'accounts-service', and 'rewards-service'.
+  """
+  me: User
+
+  """
+  Retrieves a single bank account by its unique identifier.
+  Primarily fetches data from the 'accounts-service'.
+  """
+  account(id: ID!): Account
+}
+
+"""
+Input object for the transferFunds mutation.
+"""
+input TransferFundsInput {
+  """A unique key provided by the client to ensure the mutation is idempotent."""
+  idempotencyKey: String!
+
+  """The ID of the account to transfer funds from."""
+  sourceAccountId: ID!
+
+  """The ID of the account to transfer funds to."""
+  destinationAccountId: ID!
+
+  """The monetary amount to transfer."""
+  amount: Decimal!
+
+  """The ISO 4217 currency code for the amount."""
+  currency: String!
+
+  """An optional memo or description for the transfer."""
+  memo: String
+}
+
+"""
+The payload returned from a successful transferFunds mutation.
+"""
+type TransferFundsPayload {
+  """The payment object representing the initiated funds transfer."""
+  payment: Payment
+}
+
+"""
+The root for all write operations in the schema.
+"""
+type Mutation {
+  """
+  Initiates a transfer of funds between two of the user's accounts. This is an asynchronous operation
+  that will be orchestrated by the 'payments-service'.
+  """
+  transferFunds(input: TransferFundsInput!): TransferFundsPayload
+}
