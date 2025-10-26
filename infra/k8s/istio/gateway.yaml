@@ -1,39 +1,70 @@
+# =========================================================================
+# Elite AI Implementation Team - Infrastructure-as-Code
+#
+# FILE: infra/k8s/istio/gateway.yaml
+#
+# DESCRIPTION:
+# This manifest defines the primary Ingress Gateway for the entire platform.
+# It serves as the single, secure entry point for all external traffic into
+# the service mesh, managing TLS termination and HTTP-to-HTTPS redirection.
+#
+# ARCHITECTURAL ALIGNMENT:
+# - BFF Layer: Defines the public hostnames for the UI shell (app.globobank.com)
+#   and the GraphQL Backend-for-Frontend (BFF) services (api.globobank.com).
+# - Zero Trust: Works in conjunction with PeerAuthentication and AuthorizationPolicies
+#   to enforce a secure perimeter. It terminates external TLS and ensures all
+#   traffic entering the mesh is subject to mesh-internal security policies.
+# - Docs-as-Code: This configuration is fully documented to explain its purpose
+#   and interaction with other system components.
+#
+# USAGE:
+# This Gateway resource controls the default Istio ingress gateway controller,
+# which runs in the 'istio-system' namespace. Routing for the specified hosts
+# is handled by separate VirtualService resources, which map specific paths
+# (e.g., /graphql) to the appropriate BFF or microservice within the mesh.
+# =========================================================================
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
+  # This Gateway resource is deployed to the 'istio-system' namespace to reside
+  # with the ingress gateway controller it configures.
   name: main-gateway
   namespace: istio-system
-  labels:
-    app: main-gateway
 spec:
+  # Selects the default Istio ingress gateway controller pods.
   selector:
-    istio: ingressgateway # use the default Istio ingress gateway
+    istio: ingressgateway
   servers:
-    # Server for HTTP traffic, redirects to HTTPS
+    # Server for handling HTTP traffic on port 80.
+    # Its sole purpose is to perform a 301 redirect to HTTPS for all incoming requests,
+    # enforcing encryption for all external traffic.
     - port:
         number: 80
         name: http
         protocol: HTTP
       hosts:
-        - "*"
+        - "app.globobank.com"
+        - "api.globobank.com"
       tls:
-        httpsRedirect: true # Send 301 redirect for all http requests
+        httpsRedirect: true
 
-    # Server for HTTPS traffic for all microservices
+    # Server for handling all HTTPS traffic on port 443.
+    # This server terminates TLS for the specified application domains.
     - port:
         number: 443
-        name: https-main
+        name: https
         protocol: HTTPS
       hosts:
-        # This will be configured via VirtualServices for each domain
-        - "*"
+        # Hostname for the main web application shell and micro-frontends.
+        - "app.globobank.com"
+        # Primary API endpoint for GraphQL BFFs and other public services.
+        - "api.globobank.com"
       tls:
+        # SIMPLE mode means the gateway will terminate TLS using the specified certificate.
+        # Traffic from the gateway to backend services inside the mesh will be re-encrypted
+        # with mTLS, as per the mesh-wide PeerAuthentication policy.
         mode: SIMPLE
-        # The credentialName must correspond to a Kubernetes secret in the istio-system namespace
-        # that contains the TLS certificate and private key for the gateway.
-        # This secret needs to be created separately, e.g., via cert-manager or manually.
-        # Example secret creation:
-        # kubectl create -n istio-system secret tls globobank-tls-credential \
-        #   --key /path/to/key.pem \
-        #   --cert /path/to/cert.pem
+        # The 'credentialName' must match a Kubernetes secret of type 'tls' in the same
+        # namespace as the gateway controller ('istio-system').
+        # In a production environment, this secret is managed by cert-manager.
         credentialName: globobank-tls-credential

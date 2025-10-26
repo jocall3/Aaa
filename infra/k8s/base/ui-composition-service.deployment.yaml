@@ -1,0 +1,98 @@
+# This file is part of the infrastructure-as-code configuration for the
+# B2B Banking System, managed by the Elite AI Implementation Team.
+#
+# This manifest defines the Kubernetes Deployment for the UI Composition Service.
+# As per the "Backend-Driven UI Composition" architectural directive, this service
+# is responsible for serving declarative JSON/YAML payloads that define the layout
+# of a page, which micro-frontends to render, and what configuration to pass them.
+#
+# This base configuration is intended for all environments and will be patched
+# by Kustomize overlays for environment-specific settings (e.g., replicas,
+# resource limits, image tags).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-composition-service
+  labels:
+    app.kubernetes.io/name: ui-composition-service
+    tier: backend
+spec:
+  replicas: 1 # Default for base; overridden in production overlay for HA.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ui-composition-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ui-composition-service
+        tier: backend
+      annotations:
+        # Enable Istio sidecar injection to integrate with the service mesh.
+        sidecar.istio.io/inject: "true"
+        # Placeholder for Vault annotations which will be patched by overlays.
+        # vault.hashicorp.com/agent-inject: "true"
+        # vault.hashicorp.com/role: "ui-composition-service"
+        # vault.hashicorp.com/agent-inject-secret-config.json: "secret/data/ui-composition-service"
+    spec:
+      # A dedicated ServiceAccount is recommended for security (least privilege).
+      serviceAccountName: ui-composition-service
+      automountServiceAccountToken: true
+      containers:
+        - name: ui-composition-service
+          # The image tag is intentionally 'latest' in the base. Overlays MUST patch this
+          # to a specific, immutable tag for production deployments.
+          image: bank-of-anthos/ui-composition-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8080"
+            - name: LOG_LEVEL
+              value: "info"
+            # Configuration source for UI layouts. Could be 'FILE', 'GIT', 'DATABASE', etc.
+            # This demonstrates loading from a mounted ConfigMap.
+            - name: UI_LAYOUT_SOURCE_TYPE
+              value: "FILE"
+            - name: UI_LAYOUT_SOURCE_PATH
+              value: "/etc/ui-layouts/layouts.json"
+          # Probes are essential for service health monitoring by Kubernetes.
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # Base resource requests and limits. These should be tuned based on
+          # performance testing and will be patched by environment overlays.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: layout-config-volume
+              mountPath: /etc/ui-layouts
+              readOnly: true
+      volumes:
+        - name: layout-config-volume
+          configMap:
+            # This ConfigMap should contain the declarative UI layout definitions.
+            # It will be defined in a separate file (e.g., ui-composition-service.configmap.yaml)
+            # and included in the kustomization.yaml.
+            name: ui-composition-layouts
