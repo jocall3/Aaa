@@ -1,0 +1,68 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/shell/*": [
+        "apps/shell/src/*"
+      ],
+      "@/design-system/*": [
+        "packages/design-system/src/*"
+      ],
+      "@/mfe-accounts/*": [
+        "apps/mfe-accounts/src/*"
+      ],
+      "@/mfe-transfers/*": [
+        "apps/mfe-transfers/src/*"
+      ],
+      "@/mfe-history/*": [
+        "apps/mfe-history/src/*"
+      ],
+      "@/iam-sdk/*": [
+        "packages/sdks/iam/src/*"
+      ],
+      "@/accounts-sdk/*": [
+        "packages/sdks/accounts/src/*"
+      ],
+      "@/payments-sdk/*": [
+        "packages/sdks/payments/src/*"
+      ],
+      "@/rewards-sdk/*": [
+        "packages/sdks/rewards/src/*"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "tmp",
+    "dist",
+    "build"
+  ]
+}

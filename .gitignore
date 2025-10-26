@@ -1,0 +1,208 @@
+# Created by Elite AI Implementation Team
+# Comprehensive .gitignore for a Domain-Driven, Event-Sourced, CQRS-Based Microservices Architecture
+
+# ===================================================================
+# General & OS-specific
+# ===================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===================================================================
+# IDE and Editor Configuration
+# ===================================================================
+# IntelliJ
+.idea/
+*.iml
+*.iws
+out/
+
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+
+# NetBeans
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+.nb-gradle/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Atom
+.atom/
+
+# ===================================================================
+# Build outputs and Dependencies
+# ===================================================================
+build/
+dist/
+target/
+bin/
+*.o
+*.a
+*.so
+*.dll
+*.exe
+*.exe~
+*.jar
+*.war
+*.ear
+*.class
+
+# ===================================================================
+# Language & Framework Specific
+# ===================================================================
+
+# --- Node.js / TypeScript / React ---
+node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.next/
+coverage/
+*.tsbuildinfo
+
+# --- Java (Maven & Gradle) ---
+.gradle/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/
+*.zip.safe
+*.war.safe
+
+# --- Go ---
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.a
+# Test binary, built with `go test -c`
+*.test
+# Output of the go coverage tool, specifically when used with LiteIDE
+.out
+
+# --- Python (for tooling) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.cache
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+/site
+/venv
+/env
+
+# ===================================================================
+# Tooling and Infrastructure
+# ===================================================================
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+override.tf
+override.tf.json
+_override.tf
+_override.tf.json
+*.terraform.lock.hcl
+
+# --- Serverless Framework ---
+.serverless/
+
+# --- Secrets & Sensitive Info ---
+*.env
+.env.*
+!.env.example
+secrets.yml
+secret.*.json
+private.key
+*.pem
+.vault-token
+
+# ===================================================================
+# Code Generation
+# ===================================================================
+# Custom code generation framework cache and outputs
+.codegen/
+.codegen-cache/
+generated/
+sdk/
+
+# ===================================================================
+# Logs and Reports
+# ===================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+pids/
+*.pid
+*.seed
+*.pid.lock
+lib-cov/
+coverage/
+.nyc_output/
+.grunt/
+bower_components/
+.lock-wscript
+build/Release
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# ===================================================================
+# Documentation
+# ===================================================================
+# Ignore generated documentation files (e.g., from JSDoc, Swagger-UI, etc.)
+docs/build/
+api-docs/dist/
