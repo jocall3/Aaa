@@ -1,5 +1,5 @@
 {
-  "name": "transaction-history-mf",
+  "name": "@mfe/transaction-history",
   "version": "1.0.0",
   "private": true,
   "description": "Micro-frontend for displaying transaction history.",
@@ -12,12 +12,12 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@banking/ui-components": "1.0.0",
+    "@bank/design-system": "^1.0.0",
     "axios": "^1.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.18.0",
-    "zustand": "^4.4.6"
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@babel/core": "^7.23.2",
@@ -51,5 +51,17 @@
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.2.2"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
