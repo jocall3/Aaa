@@ -1,0 +1,40 @@
+{{#each imports.dtos}}
+import type { {{this.name}} } from '../dtos/{{this.fileName}}.dto';
+{{/each}}
+import type { IRequestContext } from '../../../../shared/domain/request-context';
+
+/**
+ * @interface I{{capitalize domainName}}Port
+ * @description Defines the inbound port for the {{domainName}} domain. This interface represents
+ * the contract that the core domain logic exposes to the outside world (e.g., API controllers).
+ * It is a key component of the Hexagonal Architecture, ensuring the domain is isolated from
+ * external technologies and frameworks.
+ *
+ * @see {Hexagonal Architecture}
+ * @version 1.0.0
+ */
+export interface I{{capitalize domainName}}Port {
+  {{#each operations}}
+  /**
+   * {{this.summary}}
+   * {{#if this.description}}
+   *
+   * @description {{this.description}}
+   * {{/if}}
+   {{#if this.methodParams}}
+   * @param params The parameters for the operation.
+   {{#each this.methodParams}}
+   * @param params.{{this.name}} {{this.description}}
+   {{/each}}
+   {{/if}}
+   * @param context The request context, containing auth info, tracing IDs, etc.
+   * @returns A promise resolving to the operation's result.
+   * @throws {DomainError} If a business rule is violated.
+   * @throws {ResourceNotFoundError} If a required resource is not found.
+   */
+  {{this.operationId}}({{#if this.methodParams}}params: { {{#each this.methodParams}}readonly {{this.name}}{{#unless this.required}}?{{/unless}}: {{this.tsType}};{{/each}} }, {{/if}}context: IRequestContext): Promise<{{this.responseType}}>;
+  {{#unless @last}}
+
+  {{/unless}}
+  {{/each}}
+}

@@ -1,0 +1,24 @@
+# This file is part of the infrastructure-as-code configuration for the
+# B2B Banking System, managed by the Elite AI Implementation Team.
+#
+# This Istio PeerAuthentication policy enforces a mesh-wide STRICT mTLS policy,
+# aligning with the Zero Trust security model architectural directive. By applying
+# this policy to the 'istio-system' namespace without a specific workload selector,
+# we mandate that all services within the mesh must communicate using mutual TLS.
+# This ensures that all inter-service traffic is authenticated and encrypted by default.
+#
+# For more details on Istio mTLS, see the official documentation:
+# https://istio.io/latest/docs/concepts/security/#mutual-tls-authentication
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  # This policy is applied to the entire service mesh.
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    # Mode "STRICT" requires all traffic to use mTLS.
+    # Traffic that is not using mTLS will be rejected.
+    # Alternative is "PERMISSIVE" which allows both mTLS and plaintext traffic.
+    mode: STRICT

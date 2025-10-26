@@ -1,0 +1,86 @@
+{
+  "name": "elite-financial-services-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for the Domain-Driven, Event-Sourced, CQRS-Based Microservices Architecture.",
+  "author": "Elite AI Implementation Team",
+  "workspaces": [
+    "services/*",
+    "frontends/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "prepare": "husky",
+    "bootstrap": "npm install",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",
+    "build": "npm run build --workspaces --if-present",
+    "build:services": "npm run build --workspace=services/*",
+    "build:frontends": "npm run build --workspace=frontends/*",
+    "build:packages": "npm run build --workspace=packages/*",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:ci": "jest --ci --coverage --silent",
+    "lint": "eslint . --ext .ts,.tsx --fix",
+    "lint:ci": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
+    "type-check": "tsc --noEmit",
+    "generate:sdk": "ts-node ./scripts/code-generator/index.ts",
+    "docs:api": "redoc-cli bundle services/accounts/openapi.yaml -o docs/api/accounts.html && redoc-cli bundle services/payments/openapi.yaml -o docs/api/payments.html",
+    "docs:ts": "typedoc --out docs/ts",
+    "docs:build": "npm-run-all docs:api docs:ts",
+    "adr": "echo 'Run adr-tools command, e.g., adr new \"My New Decision\"'",
+    "start:services": "concurrently \"npm:start:iam\" \"npm:start:accounts\" \"npm:start:payments\"",
+    "start:iam": "npm start --workspace=services/iam-service",
+    "start:accounts": "npm start --workspace=services/accounts-service",
+    "start:payments": "npm start --workspace=services/payments-service",
+    "start:rewards": "npm start --workspace=services/rewards-service",
+    "start:shell": "npm start --workspace=frontends/shell-app",
+    "start:mfe-accounts": "npm start --workspace=frontends/mfe-accounts"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.6.1",
+    "@commitlint/config-conventional": "^18.6.2",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jest": "^27.9.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.0.11",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "lint-staged": "^15.2.2",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.2.5",
+    "redoc-cli": "^0.13.20",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typedoc": "^0.25.12",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/elite-ai/financial-services-platform.git"
+  },
+  "license": "UNLICENSED",
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": "eslint --cache --fix",
+    "*.{ts,tsx,js,jsx,css,md,json,yaml,yml}": "prettier --write"
+  }
+}

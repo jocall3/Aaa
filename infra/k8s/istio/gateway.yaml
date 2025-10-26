@@ -1,0 +1,39 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: istio-system
+  labels:
+    app: main-gateway
+spec:
+  selector:
+    istio: ingressgateway # use the default Istio ingress gateway
+  servers:
+    # Server for HTTP traffic, redirects to HTTPS
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+      tls:
+        httpsRedirect: true # Send 301 redirect for all http requests
+
+    # Server for HTTPS traffic for all microservices
+    - port:
+        number: 443
+        name: https-main
+        protocol: HTTPS
+      hosts:
+        # This will be configured via VirtualServices for each domain
+        - "*"
+      tls:
+        mode: SIMPLE
+        # The credentialName must correspond to a Kubernetes secret in the istio-system namespace
+        # that contains the TLS certificate and private key for the gateway.
+        # This secret needs to be created separately, e.g., via cert-manager or manually.
+        # Example secret creation:
+        # kubectl create -n istio-system secret tls globobank-tls-credential \
+        #   --key /path/to/key.pem \
+        #   --cert /path/to/cert.pem
+        credentialName: globobank-tls-credential

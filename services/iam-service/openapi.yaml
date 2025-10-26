@@ -1,0 +1,616 @@
+openapi: 3.0.3
+info:
+  title: Identity and Access Management (IAM) Service
+  description: |-
+    A dedicated microservice acting as a central OAuth 2.1/OIDC provider for the entire platform. 
+    It is responsible for user authentication, issuing short-lived, narrowly-scoped JWTs for API access, 
+    service-to-service authentication, and managing a fine-grained Role-Based and Attribute-Based Access Control (RBAC/ABAC) policy engine.
+  version: 1.0.0
+  contact:
+    name: Elite AI Implementation Team
+    email: iam-team@example.com
+servers:
+  - url: /iam/v1
+    description: IAM Service v1
+tags:
+  - name: OIDC & OAuth2
+    description: OpenID Connect and OAuth 2.1 core endpoints.
+  - name: User Management
+    description: API for managing user identities.
+  - name: Role Management
+    description: API for managing user roles (RBAC).
+  - name: Permission Management
+    description: API for managing permissions (RBAC).
+  - name: Policy Management
+    description: API for managing attribute-based policies (ABAC).
+paths:
+  /.well-known/openid-configuration:
+    get:
+      tags:
+        - OIDC & OAuth2
+      summary: Get OIDC Provider Configuration
+      description: Returns OpenID Provider metadata. This is a public endpoint used by clients to discover OIDC endpoints and capabilities.
+      operationId: getOidcConfiguration
+      responses:
+        '200':
+          description: OIDC Provider configuration document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OIDCProviderConfiguration'
+  /.well-known/jwks.json:
+    get:
+      tags:
+        - OIDC & OAuth2
+      summary: Get JSON Web Key Set (JWKS)
+      description: Returns the public keys used by the IAM service to sign JWTs. Resource servers use this to validate token signatures. This is a public endpoint.
+      operationId: getJwks
+      responses:
+        '200':
+          description: A JSON Web Key Set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JWKS'
+  /oauth2/authorize:
+    get:
+      tags:
+        - OIDC & OAuth2
+      summary: OIDC Authorization Endpoint
+      description: Initiates the OIDC authentication and consent flow. This endpoint is typically accessed via a browser redirect.
+      operationId: authorize
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          description: The type of response requested. Must be `code`.
+          schema:
+            type: string
+            enum: [code]
+        - name: client_id
+          in: query
+          required: true
+          description: The client identifier issued to the client during registration.
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          description: The URI to which the authorization server will redirect the user-agent after authentication.
+          schema:
+            type: string
+            format: uri
+        - name: scope
+          in: query
+          required: true
+          description: A space-delimited list of scopes. Must include `openid`.
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          description: An opaque value used by the client to maintain state between the request and callback.
+          schema:
+            type: string
+        - name: nonce
+          in: query
+          required: false
+          description: A string value used to associate a Client session with an ID Token, and to mitigate replay attacks.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: |-
+            Redirection to the login and consent UI, and subsequently to the `redirect_uri` with an authorization code or an error.
+            The location header will contain the redirection URL.
+        '400':
+          description: Bad request, e.g., missing or invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /oauth2/token:
+    post:
+      tags:
+        - OIDC & OAuth2
+      summary: OIDC Token Endpoint
+      description: Exchanges an authorization code or refresh token for an access token, ID token, and refresh token. Also supports client credentials grant for service-to-service authentication.
+      operationId: getToken
+      security:
+        - ClientBasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  description: The grant type being used.
+                  enum: [authorization_code, client_credentials, refresh_token]
+                code:
+                  type: string
+                  description: The authorization code received from the authorization server. Required for `authorization_code` grant.
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: The redirect URI used in the initial authorization request. Required for `authorization_code` grant.
+                refresh_token:
+                  type: string
+                  description: The refresh token issued to the client. Required for `refresh_token` grant.
+                scope:
+                  type: string
+                  description: The scope of the access request. Required for `client_credentials` grant.
+      responses:
+        '200':
+          description: Successfully issued tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad Request. The request is missing a parameter, includes an unsupported parameter, or is otherwise malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: Unauthorized. Client authentication failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /users:
+    get:
+      tags:
+        - User Management
+      summary: List Users
+      description: Retrieves a paginated list of users. Requires administrative privileges.
+      operationId: listUsers
+      security:
+        - OAuth2Flow: [iam:users:read]
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return.
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          description: The number of items to skip.
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: A paginated list of users.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsers'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - User Management
+      summary: Create User
+      description: Creates a new user in the system. Requires administrative privileges.
+      operationId: createUser
+      security:
+        - OAuth2Flow: [iam:users:create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict, user already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /users/{userId}:
+    get:
+      tags:
+        - User Management
+      summary: Get User by ID
+      description: Retrieves a single user by their unique ID.
+      operationId: getUserById
+      security:
+        - OAuth2Flow: [iam:users:read]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The user object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+        - User Management
+      summary: Update User
+      description: Partially updates a user's information.
+      operationId: updateUser
+      security:
+        - OAuth2Flow: [iam:users:update]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: User updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - User Management
+      summary: Delete User
+      description: Deletes a user from the system.
+      operationId: deleteUser
+      security:
+        - OAuth2Flow: [iam:users:delete]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: User deleted successfully.
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /users/{userId}/roles:
+    post:
+      tags:
+        - Role Management
+      summary: Assign Role to User
+      description: Assigns a specific role to a user.
+      operationId: assignRoleToUser
+      security:
+        - OAuth2Flow: [iam:roles:assign]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleId:
+                  type: string
+                  format: uuid
+              required:
+                - roleId
+      responses:
+        '204':
+          description: Role assigned successfully.
+        '404':
+          description: User or Role not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /users/{userId}/roles/{roleId}:
+    delete:
+      tags:
+        - Role Management
+      summary: Unassign Role from User
+      description: Removes a specific role from a user.
+      operationId: unassignRoleFromUser
+      security:
+        - OAuth2Flow: [iam:roles:unassign]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Role unassigned successfully.
+        '404':
+          description: User or Role not found, or assignment does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /roles:
+    get:
+      tags:
+        - Role Management
+      summary: List Roles
+      description: Retrieves a paginated list of roles.
+      operationId: listRoles
+      security:
+        - OAuth2Flow: [iam:roles:read]
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return.
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          description: The number of items to skip.
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: A paginated list of roles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoles'
+    post:
+      tags:
+        - Role Management
+      summary: Create Role
+      description: Creates a new role.
+      operationId: createRole
+      security:
+        - OAuth2Flow: [iam:roles:create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Role created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '409':
+          description: Conflict, role name already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /roles/{roleId}:
+    get:
+      tags:
+        - Role Management
+      summary: Get Role by ID
+      description: Retrieves a single role by its unique ID.
+      operationId: getRoleById
+      security:
+        - OAuth2Flow: [iam:roles:read]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The role object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '404':
+          description: Role not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    OIDCProviderConfiguration:
+      type: object
+      description: OIDC Provider metadata.
+      properties:
+        issuer: { type: string, format: uri }
+        authorization_endpoint: { type: string, format: uri }
+        token_endpoint: { type: string, format: uri }
+        userinfo_endpoint: { type: string, format: uri }
+        jwks_uri: { type: string, format: uri }
+        scopes_supported: { type: array, items: { type: string } }
+        response_types_supported: { type: array, items: { type: string } }
+        grant_types_supported: { type: array, items: { type: string } }
+        subject_types_supported: { type: array, items: { type: string } }
+        id_token_signing_alg_values_supported: { type: array, items: { type: string } }
+    JWKS:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty: { type: string }
+              use: { type: string }
+              kid: { type: string }
+              alg: { type: string }
+              n: { type: string }
+              e: { type: string }
+    TokenResponse:
+      type: object
+      description: Response body for the token endpoint.
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: "Bearer" }
+        expires_in: { type: integer, format: int32 }
+        refresh_token: { type: string }
+        scope: { type: string }
+        id_token: { type: string, description: "A JSON Web Token (JWT)." }
+    OAuthError:
+      type: object
+      properties:
+        error: { type: string }
+        error_description: { type: string }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: "A service-specific error code." }
+        message: { type: string, description: "A human-readable error message." }
+        target: { type: string, description: "The field that caused the error, if applicable." }
+    User:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        firstName: { type: string, nullable: true }
+        lastName: { type: string, nullable: true }
+        enabled: { type: boolean, default: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    UserCreate:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, description: "User's password. Must meet complexity requirements." }
+        firstName: { type: string }
+        lastName: { type: string }
+    UserUpdate:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        enabled: { type: boolean }
+    PaginatedUsers:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    Role:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: "Unique name of the role." }
+        description: { type: string, nullable: true }
+        permissions: { type: array, items: { type: string }, description: "List of permission identifiers associated with the role." }
+        createdAt: { type: string, format: date-time }
+    RoleCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        permissions: { type: array, items: { type: string } }
+    PaginatedRoles:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+  securitySchemes:
+    ClientBasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic authentication for clients at the token endpoint, using client_id as username and client_secret as password.
+    OAuth2Flow:
+      type: oauth2
+      description: OAuth2 flow for securing API endpoints.
+      flows:
+        authorizationCode:
+          authorizationUrl: /iam/v1/oauth2/authorize
+          tokenUrl: /iam/v1/oauth2/token
+          scopes:
+            openid: Grants access to the user's unique identifier.
+            profile: Grants access to the user's profile information.
+            email: Grants access to the user's email address.
+            iam:users:read: Allows reading user information.
+            iam:users:create: Allows creating new users.
+            iam:users:update: Allows updating users.
+            iam:users:delete: Allows deleting users.
+            iam:roles:read: Allows reading role information.
+            iam:roles:create: Allows creating new roles.
+            iam:roles:assign: Allows assigning roles to users.
+            iam:roles:unassign: Allows unassigning roles from users.
+security:
+  - OAuth2Flow: []

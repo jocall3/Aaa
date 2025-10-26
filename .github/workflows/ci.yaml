@@ -1,0 +1,173 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-specs:
+    name: Validate OpenAPI Specifications
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Spectral CLI
+        run: npm install -g @stoplight/spectral-cli
+
+      - name: Lint OpenAPI Specifications
+        run: |
+          # This will validate all OpenAPI specifications against the default ruleset.
+          # A custom ruleset should be developed to enforce organization-specific standards.
+          spectral lint ./**/*.yaml --ruleset oas
+          spectral lint ./**/*.yml --ruleset oas
+
+  docs-and-compliance:
+    name: Documentation and Compliance Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Lint Architectural Decision Records (ADRs)
+        run: |
+          # Placeholder for ADR linting. This script would verify the format
+          # of markdown files in the 'docs/adr' directory, ensuring they follow
+          # the standardized template (e.g., status, context, decision, consequences).
+          echo "Linting ADRs... (Placeholder)"
+          # Example: find docs/adr -name "*.md" -exec adr-linter {} \;
+
+      - name: Generate API Documentation from OpenAPI Specs
+        run: |
+          # Placeholder for generating user-facing API documentation.
+          # Tools like Redocly or Spectaql could be used here to generate HTML docs.
+          echo "Generating API documentation... (Placeholder)"
+          # Example: npx redoc-cli bundle openapi.yaml -o docs/api/index.html
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # CodeQL requires the languages to be specified. Based on the architectural
+      # directives, the platform will be polyglot.
+      - name: Initialize CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go, java, javascript
+
+      # A build step is required for compiled languages for CodeQL to work.
+      # This is a placeholder for the actual monorepo build command.
+      - name: Autobuild (Placeholder)
+        run: |
+          echo "Running build steps for CodeQL analysis..."
+          # Example for Go: go build ./...
+          # Example for Java: mvn clean install
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  build-test-services:
+    name: Build & Test Microservices
+    needs: [validate-specs]
+    runs-on: ubuntu-latest
+    # The matrix should be dynamically populated based on changed services in a monorepo.
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [accounts, payments, user-identity, rewards]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Setup all required language environments for the polyglot architecture.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Run In-House Code Generator (Placeholder)
+        id: code-gen
+        run: |
+          # This step represents running the custom code generation framework.
+          # It would consume the OpenAPI spec for the service and output ports, adapters, DTOs, etc.
+          echo "Running code generation for ${{ matrix.service }} service..."
+          # ./scripts/generate-service --service=${{ matrix.service }}
+
+      - name: Build & Test Service (Placeholder)
+        run: |
+          echo "Building and testing ${{ matrix.service }}..."
+          # This script would navigate to the service's directory and run its build and test commands.
+          # For example, for a Java service:
+          # cd services/${{ matrix.service }}
+          # mvn clean install
+          # For a Go service:
+          # cd services/${{ matrix.service }}
+          # go build ./...
+          # go test -v ./...
+
+  build-test-frontends:
+    name: Build & Test Micro-Frontends
+    needs: [validate-specs]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        microfrontend: [account-list, transfer-funds, transaction-history]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies & Lint (Placeholder)
+        run: |
+          echo "Installing dependencies and linting for ${{ matrix.microfrontend }}..."
+          # cd frontends/${{ matrix.microfrontend }}
+          # npm install
+          # npm run lint # Linting script must enforce TSDoc/JSDoc rules.
+
+      - name: Build Micro-Frontend with Module Federation (Placeholder)
+        run: |
+          echo "Building ${{ matrix.microfrontend }}..."
+          # cd frontends/${{ matrix.microfrontend }}
+          # npm run build
+
+      - name: Run Frontend Tests (Placeholder)
+        run: |
+          echo "Running tests for ${{ matrix.microfrontend }}..."
+          # cd frontends/${{ matrix.microfrontend }}
+          # npm test
