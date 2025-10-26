@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: Continuous Integration & Delivery
 
 on:
   push:
@@ -8,53 +8,98 @@ on:
     branches:
       - main
 
+# Define environment variables for the workflow
+env:
+  NODE_VERSION: '20'
+  # Using pnpm for monorepo management
+  PNPM_VERSION: 8
+  # Using GitHub Container Registry
+  DOCKER_REGISTRY: ghcr.io
+
 jobs:
-  validate-specs:
-    name: Validate OpenAPI Specifications
+  # This job determines which parts of the monorepo have changed
+  # to dynamically run subsequent jobs, a best practice for monorepos.
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.services }}
+      frontends: ${{ steps.filter.outputs.frontends }}
+      libs: ${{ steps.filter.outputs.libs }}
+      infra: ${{ steps.filter.outputs.infra }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            services:
+              - 'services/**'
+            frontends:
+              - 'frontend/**'
+            libs:
+              - 'libs/**'
+            infra:
+              - 'infra/**'
+            docs:
+              - 'docs/**'
+              - '**/*.md'
+              - '**/*.yaml'
+
+  # A single, comprehensive linting and static analysis job
+  lint-and-analyze:
+    name: Lint & Static Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-      - name: Install Spectral CLI
-        run: npm install -g @stoplight/spectral-cli
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Lint Codebase
+        run: pnpm lint:ci # Root script for ESLint, including TSDoc rules
+
+      - name: Check Code Formatting
+        run: pnpm format --check # Root script for Prettier
+
+      - name: Check TypeScript Types
+        run: pnpm type-check # Root script for tsc --noEmit
 
       - name: Lint OpenAPI Specifications
         run: |
-          # This will validate all OpenAPI specifications against the default ruleset.
-          # A custom ruleset should be developed to enforce organization-specific standards.
-          spectral lint ./**/*.yaml --ruleset oas
-          spectral lint ./**/*.yml --ruleset oas
+          pnpm dlx @stoplight/spectral-cli lint 'services/**/*.yaml' --ruleset oas
 
-  docs-and-compliance:
-    name: Documentation and Compliance Checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Lint Architectural Decision Records (ADRs)
+      - name: Lint Authorization Policies (OPA/Rego)
         run: |
-          # Placeholder for ADR linting. This script would verify the format
-          # of markdown files in the 'docs/adr' directory, ensuring they follow
-          # the standardized template (e.g., status, context, decision, consequences).
-          echo "Linting ADRs... (Placeholder)"
-          # Example: find docs/adr -name "*.md" -exec adr-linter {} \;
+          # This step externalizes authorization policy validation, per architectural directives.
+          echo "Linting OPA policies... (Placeholder)"
+          # Example: opa check infra/policies
 
-      - name: Generate API Documentation from OpenAPI Specs
+      - name: Validate Event Schemas (Avro/Protobuf)
         run: |
-          # Placeholder for generating user-facing API documentation.
-          # Tools like Redocly or Spectaql could be used here to generate HTML docs.
-          echo "Generating API documentation... (Placeholder)"
-          # Example: npx redoc-cli bundle openapi.yaml -o docs/api/index.html
+          # This step enforces the schema-first approach for the event bus.
+          echo "Validating event schemas... (Placeholder)"
+          # Example: find schemas -name "*.avsc" -exec avro-tools idl {} \;
 
+  # Security scanning for vulnerabilities
   security-scan:
-    name: Security Vulnerability Scan
+    name: Security Scans
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -64,110 +109,201 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # CodeQL requires the languages to be specified. Based on the architectural
-      # directives, the platform will be polyglot.
       - name: Initialize CodeQL Analysis
         uses: github/codeql-action/init@v3
         with:
-          languages: go, java, javascript
-
-      # A build step is required for compiled languages for CodeQL to work.
-      # This is a placeholder for the actual monorepo build command.
-      - name: Autobuild (Placeholder)
-        run: |
-          echo "Running build steps for CodeQL analysis..."
-          # Example for Go: go build ./...
-          # Example for Java: mvn clean install
+          languages: javascript, typescript
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
+      - name: Dependency Vulnerability Review
+        uses: actions/dependency-review-action@v3
+
+  # Build and test all affected microservices
   build-test-services:
-    name: Build & Test Microservices
-    needs: [validate-specs]
+    name: 'Service: ${{ matrix.service }}'
+    needs: [changes, lint-and-analyze, security-scan]
+    if: fromJson(needs.changes.outputs.services)
     runs-on: ubuntu-latest
-    # The matrix should be dynamically populated based on changed services in a monorepo.
     strategy:
       fail-fast: false
       matrix:
-        service: [accounts, payments, user-identity, rewards]
+        # This should be dynamically populated from the `changes` job output.
+        # For now, it lists all services and is controlled by the `if` condition.
+        service: ['accounts-service', 'iam-service', 'payments-service', 'rewards-service']
+    
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Setup all required language environments for the polyglot architecture.
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
         with:
-          go-version: '1.21'
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-      - name: Run In-House Code Generator (Placeholder)
-        id: code-gen
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Run Tests for ${{ matrix.service }}
+        run: pnpm --filter './services/${{ matrix.service }}' test
+        
+      - name: Check Documentation Coverage (100% Mandate)
         run: |
-          # This step represents running the custom code generation framework.
-          # It would consume the OpenAPI spec for the service and output ports, adapters, DTOs, etc.
-          echo "Running code generation for ${{ matrix.service }} service..."
-          # ./scripts/generate-service --service=${{ matrix.service }}
+          echo "Checking TSDoc coverage for ${{ matrix.service }}... (Must be 100%)"
+          # Placeholder for a script that fails the build if TSDoc coverage is not met.
+          # pnpm --filter './services/${{ matrix.service }}' docs:coverage:check
+        
+      - name: Build ${{ matrix.service }}
+        run: pnpm --filter './services/${{ matrix.service }}' build
 
-      - name: Build & Test Service (Placeholder)
-        run: |
-          echo "Building and testing ${{ matrix.service }}..."
-          # This script would navigate to the service's directory and run its build and test commands.
-          # For example, for a Java service:
-          # cd services/${{ matrix.service }}
-          # mvn clean install
-          # For a Go service:
-          # cd services/${{ matrix.service }}
-          # go build ./...
-          # go test -v ./...
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          file: ./services/${{ matrix.service }}/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner,, }}/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Scan Docker Image for Vulnerabilities
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner,, }}/${{ matrix.service }}:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
+  # Build and test all affected micro-frontends
   build-test-frontends:
-    name: Build & Test Micro-Frontends
-    needs: [validate-specs]
+    name: 'Frontend: ${{ matrix.frontend }}'
+    needs: [changes, lint-and-analyze, security-scan]
+    if: fromJson(needs.changes.outputs.frontends)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        microfrontend: [account-list, transfer-funds, transaction-history]
+        frontend: ['shell', 'account-list-mf', 'transaction-history-mf', 'transfer-funds-mf']
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
 
-      - name: Install Dependencies & Lint (Placeholder)
-        run: |
-          echo "Installing dependencies and linting for ${{ matrix.microfrontend }}..."
-          # cd frontends/${{ matrix.microfrontend }}
-          # npm install
-          # npm run lint # Linting script must enforce TSDoc/JSDoc rules.
+      - name: Install Dependencies
+        run: pnpm install
 
-      - name: Build Micro-Frontend with Module Federation (Placeholder)
+      - name: Run Tests for ${{ matrix.frontend }}
+        # The package names are inconsistent, so we use path-based filtering
+        run: pnpm --filter './frontend/${{ matrix.frontend }}' test
+        
+      - name: Check Documentation Coverage (100% Mandate)
         run: |
-          echo "Building ${{ matrix.microfrontend }}..."
-          # cd frontends/${{ matrix.microfrontend }}
-          # npm run build
+          echo "Checking TSDoc coverage for ${{ matrix.frontend }}... (Must be 100%)"
+          # pnpm --filter './frontend/${{ matrix.frontend }}' docs:coverage:check
+        
+      - name: Build ${{ matrix.frontend }}
+        run: pnpm --filter './frontend/${{ matrix.frontend }}' build
 
-      - name: Run Frontend Tests (Placeholder)
+  # Generates and deploys the living documentation portal
+  publish-living-docs:
+    name: Publish Living Documentation
+    needs: [build-test-services, build-test-frontends]
+    # Only run on pushes to the main branch
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to deploy to GitHub Pages
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Generate TSDoc Documentation
+        run: pnpm typedoc --out docs/generated/tsdoc
+
+      - name: Generate OpenAPI Documentation
         run: |
-          echo "Running tests for ${{ matrix.microfrontend }}..."
-          # cd frontends/${{ matrix.microfrontend }}
-          # npm test
+          mkdir -p docs/generated/api
+          for spec in $(find services -name "openapi.yaml"); do
+            service_name=$(basename $(dirname $spec))
+            pnpm dlx @redocly/cli build-docs $spec -o docs/generated/api/$service_name.html
+          done
+          
+      - name: Aggregate Architectural Decision Records (ADRs)
+        run: |
+          mkdir -p docs/generated/adrs
+          cp -r docs/adr/*.md docs/generated/adrs/ 2>/dev/null || echo "No ADRs found."
+      
+      - name: Build Documentation Index
+        run: |
+          # This is a simple index page. A real implementation would use a static site generator.
+          echo "<html><head><title>Living Documentation</title></head><body>" > docs/generated/index.html
+          echo "<h1>Living Documentation Portal</h1><h2>As of commit ${{ github.sha }}</h2>" >> docs/generated/index.html
+          echo "<h2>API Specifications</h2><ul>" >> docs/generated/index.html
+          for f in $(find docs/generated/api -name "*.html"); do
+            name=$(basename $f .html)
+            echo "<li><a href='api/$name.html'>$name</a></li>" >> docs/generated/index.html
+          done
+          echo "</ul><h2>TypeScript Documentation</h2>" >> docs/generated/index.html
+          echo "<p><a href='tsdoc/index.html'>Browse TSDoc</a></p>" >> docs/generated/index.html
+          echo "<h2>Architectural Decision Records</h2><ul>" >> docs/generated/index.html
+          for f in $(find docs/generated/adrs -name "*.md"); do
+            name=$(basename $f)
+            echo "<li><a href='adrs/$name'>$name</a></li>" >> docs/generated/index.html
+          done
+          echo "</ul></body></html>"
+          
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/generated

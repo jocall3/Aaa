@@ -1,12 +1,25 @@
+# ------------------------------------------------------------------------------
+# Terraform configuration for the Event Backbone (AWS MSK & Glue Schema Registry)
+#
+# This file defines the core infrastructure for the event-driven architecture,
+# as mandated by the architectural directives. It provisions:
+# 1. A secure, highly-available AWS MSK (Managed Streaming for Kafka) cluster.
+# 2. An AWS Glue Schema Registry to enforce a schema-first approach for all events.
+# 3. Kafka topics for each domain, supporting CQRS and Event Sourcing patterns.
+#
+# This setup aligns with the "Abstracted Event Bus with a Centralized Schema
+# Registry" and "Implement a Saga Orchestration Pattern" directives.
+# ------------------------------------------------------------------------------
+
 terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.0"
+      version = ">= 4.0"
     }
     kafka = {
       source  = "hashicorp/kafka"
-      version = "~> 0.6"
+      version = ">= 0.6"
     }
   }
 }
@@ -14,6 +27,64 @@ terraform {
 provider "aws" {
   region = var.aws_region
 }
+
+# ------------------------------------------------------------------------------
+# INPUT VARIABLES
+# ------------------------------------------------------------------------------
+
+variable "aws_region" {
+  description = "The AWS region to deploy resources in."
+  type        = string
+}
+
+variable "project_name" {
+  description = "The name of the project, used for naming resources."
+  type        = string
+  default     = "elite-bank"
+}
+
+variable "environment" {
+  description = "The deployment environment (e.g., 'dev', 'staging', 'prod')."
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "The ID of the VPC to deploy the MSK cluster into."
+  type        = string
+}
+
+variable "vpc_cidr_block" {
+  description = "The CIDR block of the VPC."
+  type        = string
+}
+
+variable "subnet_ids" {
+  description = "A list of private subnet IDs for the MSK cluster nodes."
+  type        = list(string)
+}
+
+variable "kafka_version" {
+  description = "The desired Kafka software version for the MSK cluster."
+  type        = string
+  default     = "2.8.1"
+}
+
+variable "number_of_broker_nodes" {
+  description = "The number of broker nodes in the Kafka cluster. Must be a multiple of the number of AZs."
+  type        = number
+  default     = 3
+}
+
+variable "broker_instance_type" {
+  description = "The EC2 instance type for the Kafka brokers."
+  type        = string
+  default     = "kafka.m5.large"
+}
+
+
+# ------------------------------------------------------------------------------
+# LOCAL VARIABLES & CONFIGURATION
+# ------------------------------------------------------------------------------
 
 locals {
   cluster_name = "${var.project_name}-msk-cluster-${var.environment}"
@@ -24,6 +95,35 @@ locals {
     Layer       = "Infrastructure"
     Component   = "Kafka"
   }
+
+  # Avro schema definitions for key domain events, enforcing a strict schema-first approach.
+  account_created_event_schema = jsonencode({
+    type      = "record",
+    name      = "AccountCreatedEvent",
+    namespace = "com.elitebank.accounts.events",
+    fields = [
+      { name = "accountId", type = "string" },
+      { name = "userId", type = "string" },
+      { name = "accountType", type = "string" },
+      { name = "currency", type = "string" },
+      { name = "initialBalance", type = "double" },
+      { name = "createdAt", type = { "type" = "long", "logicalType" = "timestamp-millis" } }
+    ]
+  })
+
+  payment_initiated_event_schema = jsonencode({
+    type      = "record",
+    name      = "PaymentInitiatedEvent",
+    namespace = "com.elitebank.payments.events",
+    fields = [
+      { name = "paymentId", type = "string" },
+      { name = "sourceAccountId", type = "string" },
+      { name = "destinationAccountId", type = "string" },
+      { name = "amount", type = "double" },
+      { name = "currency", type = "string" },
+      { name = "initiatedAt", type = { "type" = "long", "logicalType" = "timestamp-millis" } }
+    ]
+  })
 }
 
 # ------------------------------------------------------------------------------
@@ -38,21 +138,21 @@ resource "aws_security_group" "msk_sg" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description      = "Kafka mTLS port"
-    from_port        = 9094
-    to_port          = 9094
-    protocol         = "tcp"
-    cidr_blocks      = [var.vpc_cidr_block]
-    self             = true
+    description = "Kafka mTLS port"
+    from_port   = 9094
+    to_port     = 9094
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+    self        = true
   }
 
   ingress {
-    description      = "Zookeeper port"
-    from_port        = 2181
-    to_port          = 2181
-    protocol         = "tcp"
-    cidr_blocks      = [var.vpc_cidr_block]
-    self             = true
+    description = "Zookeeper port"
+    from_port   = 2181
+    to_port     = 2181
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+    self        = true
   }
 
   egress {
@@ -70,7 +170,6 @@ resource "aws_security_group" "msk_sg" {
 # ------------------------------------------------------------------------------
 
 # KMS Key for Encryption at Rest
-# As per security directives, all data must be encrypted at rest.
 resource "aws_kms_key" "msk_key" {
   description             = "KMS key for MSK cluster ${local.cluster_name}"
   deletion_window_in_days = 10
@@ -78,7 +177,6 @@ resource "aws_kms_key" "msk_key" {
 }
 
 # AWS Certificate Manager Private Certificate Authority for mTLS
-# Required by the Zero Trust security model to enforce mutual TLS between clients and brokers.
 resource "aws_acmpca_certificate_authority" "kafka_ca" {
   certificate_authority_configuration {
     key_algorithm     = "RSA_4096"
@@ -125,8 +223,6 @@ resource "aws_acmpca_certificate_authority_certificate" "kafka_ca_import" {
 # KAFKA CLUSTER (AWS MSK)
 # ------------------------------------------------------------------------------
 
-# AWS Managed Streaming for Kafka (MSK) Cluster
-# This is the core of the event-driven backbone for the microservices architecture.
 resource "aws_msk_cluster" "kafka_cluster" {
   depends_on = [aws_acmpca_certificate_authority_certificate.kafka_ca_import]
 
@@ -180,28 +276,51 @@ resource "aws_msk_cluster" "kafka_cluster" {
 }
 
 # ------------------------------------------------------------------------------
+# SCHEMA REGISTRY (AWS GLUE)
+# ------------------------------------------------------------------------------
+
+resource "aws_glue_registry" "domain_events" {
+  registry_name = "${var.project_name}-domain-events-${var.environment}"
+  description   = "Centralized schema registry for all domain events."
+  tags          = local.tags
+}
+
+# This schema subject follows the TopicRecordNameStrategy, where the subject name
+# is constructed as: <topic-name>-<fully-qualified-record-name>.
+resource "aws_glue_schema" "account_created_event" {
+  schema_name       = "${var.environment}.accounts.events-com.elitebank.accounts.events.AccountCreatedEvent"
+  registry_arn      = aws_glue_registry.domain_events.arn
+  data_format       = "AVRO"
+  compatibility     = "BACKWARD" # Allows for backward-compatible schema evolution.
+  schema_definition = local.account_created_event_schema
+  tags              = local.tags
+}
+
+resource "aws_glue_schema" "payment_initiated_event" {
+  schema_name       = "${var.environment}.payments.events-com.elitebank.payments.events.PaymentInitiatedEvent"
+  registry_arn      = aws_glue_registry.domain_events.arn
+  data_format       = "AVRO"
+  compatibility     = "BACKWARD"
+  schema_definition = local.payment_initiated_event_schema
+  tags              = local.tags
+}
+
+# ------------------------------------------------------------------------------
 # KAFKA TOPICS
 # ------------------------------------------------------------------------------
 
-# The Kafka provider requires connectivity and credentials for the cluster.
-# When using mTLS, client certificates must be provided. This often requires a two-step
-# process: 1) Create cluster, 2) Generate client certs and configure provider to create topics.
-# This configuration assumes credentials will be available when it runs.
 provider "kafka" {
   bootstrap_servers = aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
-
-  # NOTE: In a real-world scenario with mTLS, you would need to configure the provider
-  # with client certificates issued by the Private CA created above.
+  # NOTE: To run this Terraform, the machine must have network access to the MSK brokers.
+  # For mTLS, client certificates issued by the private CA must be configured here.
   # tls_enabled = true
-  # tls_config {
-  #   ca_certs   = [file("ca.pem")]
-  #   client_cert = file("client.pem")
-  #   client_key  = file("client.key")
-  # }
+  # ca_cert     = file("ca.pem")
+  # client_cert = file("client.pem")
+  # client_key  = file("client.key")
 }
 
 locals {
-  domains = ["accounts", "payments", "identity", "rewards"]
+  domains = ["accounts", "payments", "identity", "rewards", "saga-orchestrator"]
 
   # Event topics for Event Sourcing and inter-service communication
   event_topics = toset([for domain in local.domains : "${domain}.events"])
@@ -216,7 +335,7 @@ locals {
   ))
 }
 
-# Define Kafka topics for each business domain, supporting Event Sourcing and CQRS patterns.
+# Define Kafka topics for each business domain.
 resource "kafka_topic" "domain_topics" {
   for_each = local.all_topics
 
@@ -225,9 +344,9 @@ resource "kafka_topic" "domain_topics" {
   replication_factor = var.number_of_broker_nodes >= 3 ? 3 : 1
 
   config = {
-    "cleanup.policy" = "delete"
+    "cleanup.policy" = "delete"    # Use 'compact' for event-sourced topics if needed.
     "retention.ms"   = "604800000" # 7 days
-    "segment.bytes"  = "1073741824" # 1 GB
+    "segment.bytes"  = "1073741824"  # 1 GB
   }
 }
 
@@ -260,4 +379,9 @@ output "zookeeper_connect_string" {
 output "private_ca_arn" {
   description = "The ARN of the private certificate authority for mTLS."
   value       = aws_acmpca_certificate_authority.kafka_ca.arn
+}
+
+output "glue_schema_registry_arn" {
+  description = "The ARN of the Glue Schema Registry for domain events."
+  value       = aws_glue_registry.domain_events.arn
 }

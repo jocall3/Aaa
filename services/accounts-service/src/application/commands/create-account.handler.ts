@@ -3,16 +3,23 @@
  * @description This file contains the command handler for creating a new user account.
  * It follows the CQRS pattern, processing the CreateAccountCommand to orchestrate
  * the creation of an Account aggregate.
+ *
+ * @see /docs/adr/ADR-002-CQRS-and-Event-Sourcing.md
+ * @see /docs/adr/ADR-004-Universal-Error-Handling.md
  */
 
 import { CommandHandler, ICommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
 
+import {
+  ConcurrencyError,
+  TransientInfrastructureError,
+  ValidationError,
+} from '../../../../../libs/error-framework'; // Assuming a shared error library is at this path
 import { CreateAccountCommand } from './create-account.command';
-import { Account } from '../../../domain/aggregates/account.aggregate';
-import { IAccountRepository } from '../../../domain/ports/account.repository.interface';
-import { ACCOUNT_REPOSITORY } from '../../../domain/constants';
+import { AccountAggregate } from '../../domain/model/account.aggregate';
+import { IAccountRepository } from '../ports/account.repository';
+import { ACCOUNT_REPOSITORY } from '../../domain/account.constants';
 
 /**
  * @class CreateAccountHandler
@@ -20,12 +27,19 @@ import { ACCOUNT_REPOSITORY } from '../../../domain/constants';
  * It orchestrates the creation of a new Account aggregate root, persists the resulting
  * events to the event store through the account repository port, and publishes these events.
  * This handler is a key component of the application's command side in a CQRS architecture.
+ *
  * @implements {ICommandHandler<CreateAccountCommand, string>}
+ * @see {@link CreateAccountCommand}
+ * @see {@link AccountAggregate}
  */
 @CommandHandler(CreateAccountCommand)
-export class CreateAccountHandler implements ICommandHandler<CreateAccountCommand, string> {
+export class CreateAccountHandler
+  implements ICommandHandler<CreateAccountCommand, string>
+{
   /**
    * Constructs an instance of CreateAccountHandler.
+   *
+   * @public
    * @param {IAccountRepository} repository - Injected implementation of the account repository port,
    * used for event persistence. This follows the Dependency Inversion Principle, where the application
    * layer depends on an abstraction (port) defined in the domain layer.
@@ -42,47 +56,53 @@ export class CreateAccountHandler implements ICommandHandler<CreateAccountComman
    * @method execute
    * @description Handles the logic for the CreateAccountCommand.
    * This method performs the following steps:
-   * 1. Generates a unique ID for the new account.
-   * 2. Bridges the new Account aggregate instance with the event bus.
-   * 3. Invokes the domain logic on the aggregate to create the account, which generates an `AccountCreatedEvent`.
-   * 4. Persists the new event(s) to the event store via the repository.
-   * 5. Commits and publishes the event(s) to the event bus for consumption by other parts of the system (e.g., read model projectors).
+   * 1. Creates a new `AccountAggregate` instance using a static factory method, which validates business rules and generates an `AccountCreatedEvent`.
+   * 2. Bridges the new aggregate instance with the event bus using the `EventPublisher`.
+   * 3. Persists the new event(s) to the event store via the repository, which is responsible for optimistic concurrency control.
+   * 4. Commits the aggregate's events, which publishes them to the event bus for consumption by other parts of the system (e.g., read model projectors).
+   *
+   * @public
    * @param {CreateAccountCommand} command - The command DTO containing the data required to create a new account.
    * @returns {Promise<string>} A promise that resolves to the unique identifier (UUID) of the newly created account.
+   * @throws {ValidationError} If the command data fails business rule validation within the Account aggregate (e.g., negative initial balance).
+   * @throws {ConcurrencyError} If there is a version conflict when saving the new account's events to the event store.
+   * @throws {TransientInfrastructureError} If there is a temporary issue with the database connection during the save operation.
+   * @example
+   * // This is typically invoked by the framework based on a dispatched command.
+   * const command = new CreateAccountCommand(
+   *   'user-uuid-123',
+   *   'CHECKING',
+   *   'USD',
+   *   100.00
+   * );
+   * const accountId = await commandHandler.execute(command);
+   * console.log(accountId); // e.g., 'a1b2c3d4-e5f6-7890-1234-567890abcdef'
    */
   async execute(command: CreateAccountCommand): Promise<string> {
     const { userId, accountType, currency, initialBalance } = command;
 
-    const accountId = uuidv4();
-
-    /**
-     * The publisher.mergeObjectContext() method is a bridge between the write-side domain aggregate
-     * and the event bus. It attaches an event-aware proxy to the aggregate, enabling event publication.
-     */
-    const account = this.publisher.mergeObjectContext(
-      // The aggregate's constructor should only establish its identity.
-      // All state changes must happen via methods that apply events.
-      new Account(accountId),
+    // The factory method on the aggregate root is the single entry point for creation.
+    // It ensures all invariants are met and the initial event is raised.
+    const account = AccountAggregate.create(
+      userId,
+      accountType,
+      currency,
+      initialBalance,
     );
 
-    // Delegate the core business logic to the aggregate root.
-    // The `create` method will validate business rules and then apply an `AccountCreatedEvent`
-    // to the aggregate's internal list of uncommitted events.
-    account.create(userId, accountType, currency, initialBalance);
+    // Bridge the newly created aggregate with the event bus.
+    // This allows the aggregate to publish its events via the publisher's `commit` method.
+    const accountWithPublisher = this.publisher.mergeObjectContext(account);
 
-    /**
-     * The repository is responsible for the atomicity of persisting events to the event store.
-     * This is the "sourcing" part of Event Sourcing, saving the history of what happened.
-     */
-    await this.repository.save(account);
+    // The repository is responsible for the atomicity of persisting events to the event store.
+    // It handles optimistic concurrency checks. It must NOT clear uncommitted events.
+    await this.repository.save(accountWithPublisher);
 
-    /**
-     * Once the events are safely stored, `commit()` publishes them to the event bus.
-     * Other microservices or internal read-model projectors can then react to the `AccountCreatedEvent`.
-     * This commit is what makes the state change "public" to the rest of the system.
-     */
-    account.commit();
+    // Once events are safely stored, commit() publishes them to the event bus.
+    // This is what makes the state change "public" to the rest of the system.
+    // The publisher's commit implementation is responsible for clearing the aggregate's uncommitted events.
+    accountWithPublisher.commit();
 
-    return accountId;
+    return account.id;
   }
 }

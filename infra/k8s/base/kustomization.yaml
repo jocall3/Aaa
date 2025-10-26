@@ -15,26 +15,39 @@ resources:
   - rbac.yaml
 
   # 2. Service Mesh Configuration
-  - istio-gateway.yaml
+  # Enforce strict mTLS across the mesh and define the ingress gateway.
+  - ../istio/gateway.yaml
+  - ../istio/peer-authentication-strict.yaml
 
-  # 3. Backing Services (Data, Cache, Messaging)
+  # 3. Backing Services (Data, Cache, Messaging, Schema)
   - backing-services/kafka.yaml
   - backing-services/postgres-primary.yaml
   - backing-services/elasticsearch.yaml
   - backing-services/redis.yaml
+  - backing-services/schema-registry.yaml
 
-  # 4. Security Services
+  # 4. Security & Policy Services
   - security/vault-config.yaml
+  - security/policy-enforcement-service.yaml
 
   # 5. Core Business Microservices
   - services/iam-service.yaml
   - services/accounts-service.yaml
   - services/payments-service.yaml
   - services/rewards-service.yaml
-  - services/user-identity-service.yaml
 
-  # 6. Micro-Frontend Shell Application
+  # 6. Orchestration & Workflow Services
+  - services/saga-orchestrator-service.yaml
+
+  # 7. Backend-for-Frontend (BFF) Layer
+  - bffs/webapp-bff.yaml
+
+  # 8. Frontend & UI Composition Services
   - frontends/shell-app.yaml
+  - frontends/ui-composition-service.yaml
+
+  # 9. Engineering & Tooling Services
+  - tooling/living-documentation-portal.yaml
 
 # Common labels to apply to every resource deployed from this base.
 commonLabels:

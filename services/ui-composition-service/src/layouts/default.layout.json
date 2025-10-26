@@ -1,0 +1,69 @@
+{
+  "id": "default-dashboard",
+  "name": "Default Dashboard Layout",
+  "description": "The default layout for the main user dashboard, composing account list, quick transfers, and recent transactions.",
+  "version": "1.0.0",
+  "layout": {
+    "type": "grid",
+    "template": [
+      ["header", "header"],
+      ["main", "sidebar"],
+      ["footer", "footer"]
+    ],
+    "gridOptions": {
+      "columns": "3fr 1fr",
+      "rows": "auto 1fr auto"
+    }
+  },
+  "slots": {
+    "header": [
+      {
+        "mfe": "shell",
+        "component": "GlobalHeader",
+        "props": {
+          "title": "Dashboard",
+          "showUserProfile": true
+        }
+      }
+    ],
+    "main": [
+      {
+        "mfe": "accounts",
+        "component": "AccountListApp",
+        "props": {
+          "title": "My Accounts",
+          "displayMode": "summary"
+        }
+      },
+      {
+        "mfe": "transactionHistory",
+        "component": "TransactionHistoryApp",
+        "props": {
+          "title": "Recent Activity",
+          "recordLimit": 10,
+          "accountId": "##CONTEXT##.selectedAccountId"
+        }
+      }
+    ],
+    "sidebar": [
+      {
+        "mfe": "transfers",
+        "component": "TransferFundsApp",
+        "props": {
+          "title": "Quick Transfer",
+          "displayMode": "compact",
+          "defaultFromAccountId": "##CONTEXT##.primaryAccountId"
+        }
+      }
+    ],
+    "footer": [
+       {
+        "mfe": "shell",
+        "component": "GlobalFooter",
+        "props": {
+          "copyrightNotice": "© 2024 Elite Financial Services. All rights reserved."
+        }
+      }
+    ]
+  }
+}

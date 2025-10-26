@@ -1,0 +1,101 @@
+# This EnvoyFilter implements the "Centralize Authorization with an External Policy Enforcement Service" directive.
+# It intercepts all incoming traffic at the Istio ingress gateway and sends an authorization check
+# request to a centralized Open Policy Agent (OPA) service.
+#
+# Key aspects of this configuration:
+# 1. It applies exclusively to the `istio-ingressgateway` workload, ensuring all mesh ingress traffic is subject to authorization.
+# 2. It programmatically adds an Envoy cluster definition for the OPA service, making Envoy aware of its location.
+# 3. It injects the standard Envoy External Authorization (`envoy.ext_authz`) filter into the HTTP filter chain.
+# 4. The filter is configured to call the OPA service via gRPC before routing the request to the target microservice.
+# 5. It enforces a fail-closed policy (`failure_mode_allow: false`), rejecting requests if the OPA service is unavailable.
+# 6. It sends critical request attributes (headers, path, method) to OPA, enabling fine-grained policy decisions in Rego.
+#
+# This setup effectively decouples authorization logic from individual microservices,
+# allowing security policies to be managed and updated centrally without requiring service redeployments.
+
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  # This filter is applied in the root namespace of the mesh configuration (`istio-system`)
+  # to ensure it correctly targets the ingress gateway.
+  name: opa-ext-authz-filter
+  namespace: istio-system
+spec:
+  # Selects the Istio ingress gateway pods where this filter will be applied.
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  
+  configPatches:
+    # Patch 1: Add a cluster definition for the OPA gRPC service.
+    # This teaches Envoy where and how to send the authorization check requests.
+    - applyTo: CLUSTER
+      patch:
+        operation: ADD
+        value:
+          name: "ext-authz-opa"
+          type: STRICT_DNS
+          connect_timeout: 0.5s
+          # Use HTTP/2, as required for gRPC communication with OPA.
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions"
+              explicit_http_config:
+                http2_protocol_options: {}
+          load_assignment:
+            cluster_name: "ext-authz-opa"
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          # The FQDN of the OPA service within the Kubernetes cluster.
+                          # Assumes OPA is deployed in the 'opa' namespace with a service named 'opa'.
+                          address: "opa.opa.svc.cluster.local"
+                          port_value: 9191 # The standard gRPC port for OPA's Envoy authorization server.
+
+    # Patch 2: Insert the external authorization HTTP filter into the gateway's filter chain.
+    # This intercepts incoming HTTP requests and calls the OPA service for a decision.
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.ext_authz
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+            transport_api_version: V3
+            # Deny requests if the OPA service is unavailable. This enforces a fail-closed security posture.
+            failure_mode_allow: false 
+            
+            # Configuration for the gRPC service (the OPA cluster defined in the first patch).
+            grpc_service:
+              envoy_grpc:
+                cluster_name: "ext-authz-opa"
+              timeout: "0.5s"
+
+            # On authorization denial, return a standard 403 Forbidden status code.
+            status_on_error:
+              code: Forbidden
+            
+            # Specifies which parts of the original request are sent to OPA for evaluation.
+            check_request:
+              # This section can be configured to send request body, specific headers, etc.
+              # For this implementation, we rely on the default behavior, which sends
+              # request headers, path, method, and other essential attributes.
+              # This is sufficient for JWT validation and path-based authorization.
+              pass_through:
+                matchers:
+                - header_matcher:
+                    name: ":method"
+                    string_match:
+                      exact: "OPTIONS"
+
+            clear_route_cache: true

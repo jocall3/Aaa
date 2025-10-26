@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # As per architectural directives, a dedicated Backend-for-Frontend (BFF) is introduced.
+  # This manifest defines the base deployment for the Web Application's BFF.
+  name: webapp-bff
+  namespace: microservices-platform
+  labels:
+    app.kubernetes.io/name: webapp-bff
+    app.kubernetes.io/component: bff
+    app.kubernetes.io/part-of: microservices-platform
+spec:
+  replicas: 2 # A baseline of 2 replicas for high availability. Overlays can scale this up.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp-bff
+      app.kubernetes.io/component: bff
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: webapp-bff
+        app.kubernetes.io/component: bff
+      annotations:
+        # Istio sidecar injection is enabled to enforce mTLS and centralized authorization policies via OPA.
+        sidecar.istio.io/inject: "true"
+        # Vault agent annotations enable dynamic secret injection, avoiding static secrets in the container.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "webapp-bff-role" # This role must exist in Vault
+        vault.hashicorp.com/agent-inject-secret-app-secrets.env: "secret/data/platform/webapp-bff"
+    spec:
+      serviceAccountName: webapp-bff-sa # Dedicated ServiceAccount for fine-grained RBAC
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: webapp-bff
+          image: bank-of-anthos/webapp-bff # Placeholder image; will be replaced by Kustomize overlays.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-graphql
+              containerPort: 4000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4000"
+            - name: NODE_ENV
+              value: "production"
+            - name: LOG_LEVEL
+              value: "info"
+
+            # --- Downstream Service Endpoints ---
+            # Kubernetes service DNS names for intra-cluster communication.
+            - name: ACCOUNTS_SERVICE_URL
+              value: "http://accounts-service.microservices-platform.svc.cluster.local:80"
+            - name: PAYMENTS_SERVICE_URL
+              value: "http://payments-service.microservices-platform.svc.cluster.local:80"
+
+            # --- Caching Abstraction Configuration ---
+            # As per the multi-layer caching strategy, the BFF uses a distributed Redis cache.
+            - name: REDIS_URL
+              value: "redis://redis-master.microservices-platform.svc.cluster.local:6379"
+
+            # --- Centralized Authorization Endpoint ---
+            # URL for the Open Policy Agent (OPA) service.
+            - name: OPA_URL
+              value: "http://opa-service.security.svc.cluster.local:8181/v1/data/http/authz/allow"
+
+          # Health checks ensure traffic is only sent to ready pods and that failing pods are restarted.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http-graphql
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http-graphql
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Resource requests and limits prevent resource contention and ensure pod quality of service.
+          # These are baseline values and should be tuned based on load testing.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"

@@ -1,0 +1,24 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: design-system
+  description: A comprehensive, versioned Design System and Component Library for the micro-frontend architecture.
+  tags:
+    - react
+    - design-system
+    - frontend
+    - library
+  annotations:
+    # This allows Backstage to know where the source code for this component is located.
+    github.com/project-slug: 'elite-ai/financial-services-platform'
+    # This annotation links the component to its documentation managed by TechDocs.
+    # It assumes documentation (e.g., mkdocs.yml and a /docs folder) will live alongside the component.
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: library
+  lifecycle: production
+  owner: frontend-platform-team # Placeholder for the team that owns the design system
+  system: micro-frontends-platform # Part of the overall micro-frontends platform
+  # This component provides an API (its React components) that other components can consume.
+  providesApis:
+    - design-system-api

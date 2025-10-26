@@ -2,9 +2,14 @@ import React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 /**
- * @ TSDoc
- * A utility component for rendering a loading spinner.
- * It's used internally by the Button component in its loading state.
+ * An internal utility component for rendering a loading spinner. It is used by
+ * the Button component when in its `isLoading` state. This component is not
+ * exported from the design system library.
+ *
+ * @param props - The component props.
+ * @param props.size - The size of the spinner, corresponding to the button size.
+ * @returns The SVG spinner element.
+ * @internal
  */
 const Spinner: React.FC<{ size: 'sm' | 'md' | 'lg' }> = ({ size }) => {
   const sizeClasses = {
@@ -20,6 +25,7 @@ const Spinner: React.FC<{ size: 'sm' | 'md' | 'lg' }> = ({ size }) => {
       fill="none"
       viewBox="0 0 24 24"
       aria-hidden="true"
+      role="status"
     >
       <circle
         className="opacity-25"
@@ -39,18 +45,27 @@ const Spinner: React.FC<{ size: 'sm' | 'md' | 'lg' }> = ({ size }) => {
 };
 
 /**
- * @ TSDoc
- * Defines the visual variants of the button component. This utility is used to generate
- * the appropriate CSS classes based on the button's props. It ensures a consistent
- * and maintainable styling approach across the design system.
+ * Defines the visual variants of the button component using `class-variance-authority`.
+ * This utility generates the appropriate CSS classes based on the button's props,
+ * ensuring a consistent and maintainable styling approach that aligns with the
+ * design system's token-based styling methodology. The classes suggest a utility-first
+ * CSS framework like Tailwind CSS is in use.
+ *
+ * This configuration is exported to allow consumers to build their own components
+ * that compose or extend the Button's styles.
+ *
+ * @see https://cva.style/docs
+ * @public
  */
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
+      /**
+       * @property variant - Determines the visual style of the button.
+       */
       variant: {
-        primary:
-          'bg-primary text-primary-foreground hover:bg-primary/90',
+        primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         destructive:
@@ -58,6 +73,9 @@ const buttonVariants = cva(
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
+      /**
+       * @property size - Determines the padding and height of the button.
+       */
       size: {
         sm: 'h-9 rounded-md px-3',
         md: 'h-10 px-4 py-2',
@@ -72,52 +90,73 @@ const buttonVariants = cva(
 );
 
 /**
- * @ TSDoc
- * Defines the properties for the Button component.
- * It extends standard HTML button attributes to allow passthrough of native props
- * and includes variants for styling and behavior customization.
+ * Defines the properties for the `Button` component. It extends standard HTML
+ * button attributes, allowing passthrough of native props like `onClick`, `type`, etc.
+ * It also includes variants from `buttonVariants` for styling and behavior customization.
+ *
+ * @public
+ * @interface ButtonProps
+ * @extends React.ButtonHTMLAttributes<HTMLButtonElement>
+ * @extends VariantProps<typeof buttonVariants>
  */
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   /**
-   * @ TSDoc
-   * If `true`, the button will be in a loading state, showing a spinner
-   * and disabling user interaction.
+   * If `true`, the button will display a spinner and be disabled. This is used
+   * to indicate that an action is in progress.
    * @default false
    */
   isLoading?: boolean;
+
   /**
-   * @ TSDoc
    * An optional React element to be displayed to the left of the button's content.
-   * Typically used for icons.
+   * Typically used for icons. The element will be cloned to apply standard styling.
    */
   leftIcon?: React.ReactElement;
+
   /**
-   * @ TSDoc
    * An optional React element to be displayed to the right of the button's content.
-   * Typically used for icons.
+   * Typically used for icons. The element will be cloned to apply standard styling.
    */
   rightIcon?: React.ReactElement;
 }
 
 /**
- * @ TSDoc
  * A foundational, interactive button component for the design system.
  *
- * This component serves as a base for all button elements across the application,
- * ensuring consistent styling, behavior, and accessibility. It supports various
- * visual styles, sizes, and states like loading and disabled.
+ * This component is built to be accessible and customizable, serving as a base for all
+ * button elements across the application ecosystem. It ensures consistent styling,
+ * behavior, and accessibility. It supports various visual styles (`variant`),
+ * sizes (`size`), and states (`isLoading`, `disabled`).
+ *
+ * @public
+ * @component
+ * @param props - The props for the Button component.
+ * @param ref - A ref to the underlying button element.
+ * @returns A styled button element.
  *
  * @example
  * ```tsx
- * <Button variant="primary" size="lg" onClick={() => alert('Clicked!')}>
- *   Primary Action
- * </Button>
+ * import { Button } from '@bank/design-system';
+ * // Assuming an icon component is available from a library like lucide-react
+ * import { Lock } from 'lucide-react';
  *
- * <Button variant="secondary" isLoading={true} leftIcon={<LockIcon />}>
- *   Processing
- * </Button>
+ * const MyComponent = () => (
+ *   <div style={{ display: 'flex', gap: '1rem' }}>
+ *     <Button variant="primary" size="lg" onClick={() => alert('Clicked!')}>
+ *       Primary Action
+ *     </Button>
+ *
+ *     <Button variant="secondary" isLoading={true} leftIcon={<Lock />}>
+ *       Processing
+ *     </Button>
+ *
+ *     <Button variant="destructive" disabled>
+ *       Delete
+ *     </Button>
+ *   </div>
+ * );
  * ```
  */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -135,13 +174,16 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const effectiveSize = size || 'md'; // Ensure size is not null for the spinner
+    // Ensure size has a default value for the spinner, even if not passed,
+    // by falling back to the CVA default.
+    const effectiveSize = size || 'md';
 
     return (
       <button
         className={buttonVariants({ variant, size, className })}
         ref={ref}
         disabled={isLoading || disabled}
+        aria-busy={isLoading}
         {...props}
       >
         {isLoading ? (

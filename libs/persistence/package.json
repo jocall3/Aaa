@@ -1,0 +1,37 @@
+{
+  "name": "@platform/persistence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A shared library defining the generic repository and data mapper patterns for persistence layers, as per the 'Universal Error Handling Framework and Generic Repository Pattern' architectural directive.",
+  "author": "Elite AI Implementation Team",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "clean": "rimraf dist .turbo",
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.2",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

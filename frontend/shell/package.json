@@ -2,20 +2,23 @@
   "name": "@mfe/shell",
   "version": "1.0.0",
   "private": true,
-  "description": "The shell application for the micro-frontend architecture, responsible for composing and routing to various micro-frontend applications.",
+  "description": "The shell application for the micro-frontend architecture. Acts as a dynamic rendering engine driven by a UI Composition service and orchestrates federated state via a shared event bus.",
   "scripts": {
-    "start": "webpack serve --config webpack.dev.js",
-    "build": "webpack --config webpack.prod.js",
+    "start": "cross-env NODE_ENV=development webpack serve --config webpack.config.js",
+    "build": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "lint": "eslint 'src/**/*.{js,jsx,ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{js,jsx,ts,tsx}' --fix",
     "test": "jest",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@elite-ai/federated-state-bus": "1.0.0",
+    "axios": "^1.6.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.2",
-    "styled-components": "^5.3.10"
+    "rxjs": "^7.8.1",
+    "styled-components": "^6.1.8"
   },
   "devDependencies": {
     "@babel/core": "^7.22.5",
@@ -31,6 +34,7 @@
     "@typescript-eslint/parser": "^5.60.0",
     "babel-loader": "^9.1.2",
     "clean-webpack-plugin": "^4.0.0",
+    "cross-env": "^7.0.3",
     "css-loader": "^6.8.1",
     "dotenv-webpack": "^8.0.1",
     "eslint": "^8.43.0",
