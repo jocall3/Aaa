@@ -1,0 +1,89 @@
+{
+  "name": "@services/saga-orchestrator-service",
+  "version": "1.0.0",
+  "description": "Manages distributed transactions using the Saga Orchestration pattern with Amazon States Language (ASL).",
+  "author": "Elite AI Implementation Team",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "dist/main.js",
+  "scripts": {
+    "prebuild": "rimraf dist",
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sfn": "^3.509.0",
+    "@nestjs/common": "^9.4.0",
+    "@nestjs/config": "^2.3.1",
+    "@nestjs/core": "^9.4.0",
+    "@nestjs/microservices": "^9.4.0",
+    "@nestjs/platform-express": "^9.4.0",
+    "@nestjs/typeorm": "^9.0.1",
+    "@shared/caching-client": "1.0.0",
+    "@shared/error-framework": "1.0.0",
+    "@shared/eventing": "1.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0",
+    "dotenv": "^16.0.3",
+    "nestjs-pino": "^3.2.0",
+    "pg": "^8.10.0",
+    "pino-http": "^8.3.3",
+    "pino-pretty": "^10.0.0",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0",
+    "typeorm": "^0.3.12",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^9.4.0",
+    "@nestjs/schematics": "^9.1.0",
+    "@nestjs/testing": "^9.4.0",
+    "@types/express": "^4.17.17",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.15.11",
+    "@types/supertest": "^2.0.12",
+    "@types/uuid": "^9.0.1",
+    "@typescript-eslint/eslint-plugin": "^5.57.1",
+    "@typescript-eslint/parser": "^5.57.1",
+    "eslint": "^8.38.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "jest": "^29.5.0",
+    "prettier": "^2.8.7",
+    "rimraf": "^4.4.1",
+    "source-map-support": "^0.5.21",
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.1.0",
+    "ts-loader": "^9.4.2",
+    "ts-node": "^10.9.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.0.4"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
+  }
+}
