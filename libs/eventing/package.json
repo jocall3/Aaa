@@ -24,7 +24,7 @@
     "@confluentinc/schema-registry": "^3.3.0",
     "avsc": "^5.7.7",
     "kafkajs": "^2.2.4",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.2"
   },
   "devDependencies": {
     "@types/avsc": "^5.4.3",
