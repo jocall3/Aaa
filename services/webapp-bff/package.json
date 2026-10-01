@@ -15,7 +15,7 @@
     "generate:graphql-types": "graphql-codegen --config codegen.yml"
   },
   "dependencies": {
-    "@apollo/server": "^4.10.0",
+    "@apollo/server": "^5.5.1",
     "@libs/caching-client": "1.0.0",
     "@libs/error-framework": "1.0.0",
     "axios": "^1.6.0",
